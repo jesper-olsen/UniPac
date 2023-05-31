@@ -1,4 +1,5 @@
-#UniPac: Unicode-powered Pacman Adventure 
+# UniPac: Unicode-powered Pacman Adventure 
+
 Pacman for the terminal. Controls are on the arrow keys.
 
 
@@ -6,7 +7,7 @@ Pacman for the terminal. Controls are on the arrow keys.
 % cargo run
 ```
 
-![Game UI](https://raw.githubusercontent.com/jesper-olsen/ASCII-Pacman/main/Screenshot.png) 
+![Game UI](https://raw.githubusercontent.com/jesper-olsen/UniPac/main/Screenshot.png) 
 
 
 

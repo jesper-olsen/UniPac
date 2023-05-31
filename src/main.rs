@@ -480,10 +480,8 @@ impl Game {
             _ => (),
         }
 
-        if prev_score < 10000 && self.player.score >= 10000 {
-            if self.lives < MAX_PACMAN_LIVES {
-                self.lives += 1;
-            }
+        if prev_score < 10000 && self.player.score >= 10000 && self.lives < MAX_PACMAN_LIVES {
+            self.lives += 1;
         }
 
         if self.player.score > self.high_score {
@@ -653,11 +651,11 @@ fn render_rhs(game: &Game) {
     let i = centered_x("Score : 123456"); /* get a pos base on av score digits */
     crossterm::queue!(
         stdout(),
-        cursor::MoveTo(i.try_into().unwrap(), 5.try_into().unwrap()),
+        cursor::MoveTo(i, 5.try_into().unwrap()),
         style::PrintStyledContent(format!("Score : {}", game.player.score).bold().white()),
-        cursor::MoveTo(i.try_into().unwrap(), 6.try_into().unwrap()),
+        cursor::MoveTo(i, 6.try_into().unwrap()),
         style::PrintStyledContent(format!("High  : {}", game.high_score).bold().white()),
-        cursor::MoveTo(i.try_into().unwrap(), 8.try_into().unwrap()),
+        cursor::MoveTo(i, 8.try_into().unwrap()),
         style::PrintStyledContent(format!("Level  : {}", game.level).bold().white()),
     )
     .ok();
@@ -674,7 +672,7 @@ fn render_rhs(game: &Game) {
     };
 
     //let q: usize = ncurses::COLS() as usize - i;
-    let q: u16 = cols as u16 - i;
+    let q: u16 = cols - i;
 
     let i1: usize = game.mq_idx % MARQUEE.len();
     let t: usize = q as usize + game.mq_idx;
@@ -687,19 +685,14 @@ fn render_rhs(game: &Game) {
         // );
         crossterm::queue!(
             stdout(),
-            cursor::MoveTo(i.try_into().unwrap(), rows - 1),
+            cursor::MoveTo(i, rows - 1),
             style::PrintStyledContent(MARQUEE[i1..i2].white())
         )
         .ok();
     } else {
-        // ncurses::mvprintw(
-        //     ncurses::LINES() - 1,
-        //     i.try_into().unwrap(),
-        //     format!("{}{}", &MARQUEE[i1..MARQUEE.len() - 1], &MARQUEE[0..i2]).as_str(),
-        // );
         crossterm::queue!(
             stdout(),
-            cursor::MoveTo(i.try_into().unwrap(), rows - 1),
+            cursor::MoveTo(i, rows - 1),
             style::PrintStyledContent(
                 format!("{}{}", &MARQUEE[i1..MARQUEE.len() - 1], &MARQUEE[0..i2]).white()
             ),
@@ -741,7 +734,7 @@ fn draw_board(game: &Game, bold: bool) {
                 crossterm::queue!(
                     stdout(),
                     cursor::MoveTo(col, row),
-                    style::Print(SZ_SPECIAL[game.special_idx as usize]),
+                    style::Print(SZ_SPECIAL[game.special_idx]),
                 )
                 .ok();
             })
