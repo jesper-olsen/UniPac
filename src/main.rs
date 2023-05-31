@@ -176,7 +176,6 @@ struct Game {
     special_idx: usize,
     special_duration: u32,
     time_before_special: u32,
-    special_pos: usize,
     am: AM,
 }
 
@@ -206,7 +205,6 @@ impl Game {
             ghosts: vec![],
             pill_duration: 6000,
             special_idx: 0,
-            special_pos: 14 * WIDTH + 14,
             level: 0,
             board: LEVEL1MAP.to_string().chars().collect(),
             dots_left: 0,
@@ -235,7 +233,6 @@ impl Game {
     fn initialise_special(&mut self) {
         self.timecum = 0;
         self.special_idx = self.level.try_into().unwrap();
-        self.special_pos = 14 * WIDTH + 14;
         self.respawn_special();
     }
 
