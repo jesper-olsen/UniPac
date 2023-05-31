@@ -19,11 +19,10 @@ use kira::{
     sound::static_sound::{StaticSoundData, StaticSoundSettings},
 };
 
-const MAX_GHOSTS: usize = 4;
 const MAX_PACMAN_LIVES: u32 = 6;
 const WIDTH: usize = 28;
 
-//const SZ_SPECIAL: [&str; 4] = ['$', '@', '%', '!'];
+//const SZ_SPECIAL0: [&str; 4] = ["$", "@", "%", "!"];
 const SZ_SPECIAL: [&str; 6] = [
     "\u{1F352}", // cherries
     "\u{1F353}", // strawberry
@@ -360,8 +359,8 @@ impl Game {
                         ]
                         .iter()
                         .map(|(d, p)| {
-                            let row = *p / WIDTH;
                             let col = *p % WIDTH;
+                            let row = *p / WIDTH;
                             if col == 0 {
                                 // tunnel
                                 (*d, row * WIDTH + WIDTH - 1)
@@ -470,6 +469,14 @@ impl Game {
                         self.player.score += 50;
                         self.player.next_ghost_score = 200;
                     }
+                    '$' => {
+                        if self.special_duration > 0 {
+                            self.am.play("Audio/eatpill.ogg".to_string());
+                            self.player.score += 100 + self.special_idx as u32 * 100;
+                            self.special_idx = (self.special_idx + 1) % SZ_SPECIAL.len();
+                            self.respawn_special();
+                        }
+                    }
                     _ => (),
                 }
             }
@@ -477,15 +484,9 @@ impl Game {
         }
 
         if prev_score < 10000 && self.player.score >= 10000 {
-            self.lives = (self.lives + 1) % MAX_PACMAN_LIVES;
-        }
-
-        // Special eaten
-        if self.player.pos == self.special_pos && self.special_duration > 0 {
-            self.am.play("Audio/eatpill.ogg".to_string());
-            self.player.score += 100 + self.special_idx as u32 * 100;
-            self.special_idx = (self.special_idx + 1) % SZ_SPECIAL.len();
-            self.respawn_special();
+            if self.lives < MAX_PACMAN_LIVES {
+                self.lives += 1;
+            }
         }
 
         if self.player.score > self.high_score {
@@ -494,6 +495,7 @@ impl Game {
     } // update_player
 
     fn initialise_ghosts(&mut self) {
+        const MAX_GHOSTS: usize = 4;
         self.ghosts = vec![];
         for i in 0..MAX_GHOSTS {
             self.ghosts.push(Ghost {
@@ -619,7 +621,6 @@ fn animate_dead_player(game: &Game) {
     let sz_anim = "|Vv_.+*X*+. ";
     for ch in sz_anim.chars() {
         draw_board(game, false);
-        draw_special(game);
 
         let (col, row) = index2xy(game.player.pos);
         crossterm::queue!(
@@ -712,23 +713,42 @@ fn render_rhs(game: &Game) {
 
 fn draw_board(game: &Game, bold: bool) {
     game.board.iter().enumerate().for_each(|(i, c)| {
-        let mut c = match *c {
+        let mut ch = match *c {
             '#' => "#".blue(),
             '.' => ".".white(),
             // '.' => ".".cyan(),
+            //'P' => "\u{1F36A}".slow_blink(), // cookie - too wide
+            'P' => "*".slow_blink(),
             _ => " ".white(),
         };
         if bold {
-            c = c.bold();
+            ch = ch.bold();
         }
         let (col, row) = index2xy(i);
         crossterm::queue!(
             stdout(),
             cursor::MoveTo(col, row),
-            style::PrintStyledContent(c),
+            style::PrintStyledContent(ch),
         )
         .ok();
     });
+
+    // print separately - because not styled
+    if game.special_duration > 0 {
+        game.board
+            .iter()
+            .enumerate()
+            .filter(|(_, &c)| c == '$')
+            .for_each(|(i, _)| {
+                let (col, row) = index2xy(i);
+                crossterm::queue!(
+                    stdout(),
+                    cursor::MoveTo(col, row),
+                    style::Print(SZ_SPECIAL[game.special_idx as usize]),
+                )
+                .ok();
+            })
+    }
 }
 
 fn flash_board(game: &Game) {
@@ -737,33 +757,6 @@ fn flash_board(game: &Game) {
         stdout().flush().ok();
 
         thread::sleep(time::Duration::from_millis(300));
-    }
-}
-
-fn draw_special(game: &Game) {
-    game.board
-        .iter()
-        .enumerate()
-        .filter(|(_, &c)| c == 'P')
-        .for_each(|(i, _)| {
-            let (col, row) = index2xy(i);
-            crossterm::queue!(
-                stdout(),
-                cursor::MoveTo(col, row),
-                //style::PrintStyledContent("\u{1F36A}".slow_blink()), // cookie - too wide
-                style::PrintStyledContent("*".slow_blink()),
-            )
-            .ok();
-        });
-
-    if game.special_duration > 0 {
-        let (col, row) = index2xy(game.special_pos);
-        crossterm::queue!(
-            stdout(),
-            cursor::MoveTo(col, row),
-            style::PrintStyledContent(SZ_SPECIAL[game.special_idx as usize].bold()),
-        )
-        .ok();
     }
 }
 
@@ -792,25 +785,20 @@ fn draw_ghosts(game: &Game) {
             let s = if g.edible_duration > 0 {
                 if g.edible_duration < 2000 {
                     //"\u{1F631}".rapid_blink() // looks bad
-                    "\u{1F47D}".bold() // alien
+                    "\u{1F47D}" // alien
                 } else {
-                    "\u{1F631}".bold() // Scream
+                    "\u{1F631}" // Scream
                 }
             } else {
                 match i {
-                    0 => "\u{1F47A}".bold(), // Goblin
-                    1 => "\u{1F479}".bold(), // Ogre
-                    2 => "\u{1F47B}".bold(), // Ghost
-                    _ => "\u{1F383}".bold(), // Jack-O-Lantern
+                    0 => "\u{1F47A}", // Goblin
+                    1 => "\u{1F479}", // Ogre
+                    2 => "\u{1F47B}", // Ghost
+                    _ => "\u{1F383}", // Jack-O-Lantern
                 }
             };
             let (col, row) = index2xy(g.pos);
-            crossterm::queue!(
-                stdout(),
-                cursor::MoveTo(col, row),
-                style::PrintStyledContent(s),
-            )
-            .ok();
+            crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),).ok();
         });
 }
 
@@ -818,7 +806,7 @@ fn draw_ghosts(game: &Game) {
 //  correctly, they should be pseudo-event driven like the rest of the program.
 fn draw_dynamic(game: &Game) {
     draw_board(game, false);
-    draw_special(game);
+    //draw_special(game);
     draw_player(game);
     draw_ghosts(game);
     render_rhs(game);
@@ -862,19 +850,6 @@ fn game_loop(game: &mut Game) -> GameState {
                 _ => game.player.last_input_direction,
             };
         }
-        // game.player.last_input_direction = match ncurses::getch() {
-        //     Q1 | Q2 => return GameState::UserQuit,
-        //     V => {
-        //         game.ghosts_are_edible(game.pill_duration); // cheat
-        //         game.player.last_input_direction
-        //     }
-        //     ncurses::KEY_UP => Direction::Up,
-        //     ncurses::KEY_DOWN => Direction::Down,
-        //     ncurses::KEY_LEFT => Direction::Left,
-        //     ncurses::KEY_RIGHT => Direction::Right,
-        //     _ => game.player.last_input_direction,
-        // };
-
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len(); // scroll marquee
 
         game.update((Instant::now() - start).as_millis().try_into().unwrap());
