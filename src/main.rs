@@ -22,16 +22,18 @@ use kira::{
 const MAX_PACMAN_LIVES: u32 = 6;
 const WIDTH: usize = 28;
 
-//const SZ_SPECIAL0: [&str; 4] = ["$", "@", "%", "!"];
-const SZ_SPECIAL: [&str; 6] = [
-    //  "\u{1F440}", // eyes
-    "\u{1F352}", // cherries
-    "\u{1F353}", // strawberry
-    "\u{1F34E}", // red apple
-    "\u{1F351}", // peach
-    "\u{1F514}", // bell
-    "\u{1F511}", // key
-];
+fn level2special(level: u32) -> (&'static str, u32) {
+    match level {
+        0 => ("\u{1F352}", 100),        // cherries
+        1 => ("\u{1F353}", 300),        // strawberry
+        2 | 3 => ("\u{1F351}", 500),    // peach
+        4 | 5 => ("\u{1F34E}", 700),    // red apple
+        6 | 7 => ("\u{1F347}", 1000),   // grapes
+        8 | 9 => ("\u{1F680}", 2000),   // rocket ship (Galaxian)
+        10 | 11 => ("\u{1F514}", 3000), // bell
+        _ => ("\u{1F511}", 5000),       // key
+    }
+}
 
 static LEVEL1MAP: &str = concat!(
     "############################",
@@ -174,9 +176,7 @@ struct Game {
     level: u32,
     ghosts: Vec<Ghost>,
     pill_duration: u32,
-    special_idx: usize,
     special_duration: u32,
-    time_before_special: u32,
     am: AM,
 }
 
@@ -205,14 +205,12 @@ impl Game {
             mq_idx: 0,
             ghosts: vec![],
             pill_duration: 6000,
-            special_idx: 0,
             level: 0,
             board: LEVEL1MAP.to_string().chars().collect(),
             dots_left: 0,
             high_score: 9710,
             lives: 3,
             player: Player::new(),
-            time_before_special: 1000 * (10 + (random::<u32>() % 4) * 5),
             special_duration: 0,
             am: AM { manager, sounds },
         };
@@ -231,16 +229,9 @@ impl Game {
             .unwrap();
     }
 
-    fn initialise_special(&mut self) {
-        self.timecum = 0;
-        self.special_idx = self.level.try_into().unwrap();
-        self.respawn_special();
-    }
-
     fn initialise(&mut self) {
         self.repopulate_board();
         self.initialise_ghosts();
-        self.initialise_special();
     }
 
     fn ghosts_are_edible(&mut self, duration: u32) {
@@ -250,11 +241,6 @@ impl Game {
             .for_each(|g| {
                 g.edible_duration += duration;
             })
-    }
-
-    fn respawn_special(&mut self) {
-        self.time_before_special = 1000 * (10 + (random::<u32>() % 4) * (5 + self.level));
-        self.special_duration = 0;
     }
 
     fn check_player_vs_ghosts(&mut self) {
@@ -268,7 +254,7 @@ impl Game {
                     self.am.play("Audio/eatghost.ogg".to_string());
                     self.player.score += self.player.next_ghost_score;
                     self.player.next_ghost_score *= 2;
-                    // todo: trace eyes back to home
+                    // todo: trace eyes back to home \u{1F440}", // eyes
                     g.active = false;
                 }
             })
@@ -283,15 +269,9 @@ impl Game {
         if self.special_duration > 0 {
             if self.special_duration < telaps {
                 self.special_duration = 0;
-                self.time_before_special = 1000 * (10 + (5 + self.level) * (random::<u32>() % 4));
             } else {
                 self.special_duration -= telaps;
             }
-        } else if self.time_before_special <= telaps {
-            self.time_before_special = 0;
-            self.special_duration = 1000 * (10 + random::<u32>() % 3);
-        } else {
-            self.time_before_special -= telaps;
         }
     }
 
@@ -470,9 +450,9 @@ impl Game {
                     '$' => {
                         if self.special_duration > 0 {
                             self.am.play("Audio/eatpill.ogg".to_string());
-                            self.player.score += 100 + self.special_idx as u32 * 100;
-                            self.special_idx = (self.special_idx + 1) % SZ_SPECIAL.len();
-                            self.respawn_special();
+                            let (_ch, bonus) = level2special(self.level);
+                            self.player.score += bonus;
+                            self.special_duration = 0;
                         }
                     }
                     _ => (),
@@ -533,14 +513,6 @@ fn close_render() {
 
 fn draw_end_game() {
     draw_message("GAME  OVER", true);
-    // let s = "GAME  OVER".bold().slow_blink();
-    // crossterm::queue!(
-    //     stdout(),
-    //     cursor::MoveTo(9, 14),
-    //     style::PrintStyledContent(s)
-    // )
-    // .ok();
-    // stdout().flush().ok();
 }
 
 fn draw_message(s: &str, blink: bool) {
@@ -613,16 +585,6 @@ fn render_game_info() {
     let s1: &str = "UniPac - Unicode-powered Pacman";
     let s2 = "Rusty Edition 2023 ";
 
-    /*
-        ncurses::clear();
-        ncurses::attron(ncurses::COLOR_PAIR(PC_PILL));
-        ncurses::mvprintw(2, centered_x(s1), s1);
-        ncurses::attroff(ncurses::COLOR_PAIR(PC_PILL));
-        ncurses::attron(ncurses::COLOR_PAIR(PC_PACMAN));
-        ncurses::mvprintw(3, centered_x(s2), s2);
-        ncurses::attroff(ncurses::COLOR_PAIR(PC_PACMAN));
-    */
-
     crossterm::queue!(
         stdout(),
         terminal::Clear(terminal::ClearType::All),
@@ -678,7 +640,7 @@ fn render_rhs(game: &Game) {
         cursor::MoveTo(i, 6.try_into().unwrap()),
         style::PrintStyledContent(format!("High  : {}", game.high_score).bold().white()),
         cursor::MoveTo(i, 8.try_into().unwrap()),
-        style::PrintStyledContent(format!("Level  : {}", game.level).bold().white()),
+        style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
     )
     .ok();
 
@@ -741,18 +703,14 @@ fn draw_board(game: &Game, bold: bool) {
 
     // print special separately - because not styled
     if game.special_duration > 0 {
+        let (s, _bonus) = level2special(game.level);
         game.board
             .iter()
             .enumerate()
             .filter(|(_, &c)| c == '$')
             .for_each(|(i, _)| {
                 let (col, row) = index2xy(i);
-                crossterm::queue!(
-                    stdout(),
-                    cursor::MoveTo(col, row),
-                    style::Print(SZ_SPECIAL[game.special_idx]),
-                )
-                .ok();
+                crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),).ok();
             })
     }
 }
@@ -812,7 +770,6 @@ fn draw_ghosts(game: &Game) {
 //  correctly, they should be pseudo-event driven like the rest of the program.
 fn draw_dynamic(game: &Game) {
     draw_board(game, false);
-    //draw_special(game);
     draw_player(game);
     draw_ghosts(game);
     render_rhs(game);
@@ -861,10 +818,14 @@ fn game_loop(game: &mut Game) -> GameState {
         game.update((Instant::now() - start).as_millis().try_into().unwrap());
         draw_dynamic(game);
 
-        if game.dots_left == 0 {
-            return GameState::SheetComplete;
-        } else if game.player.dead {
+        if game.player.dead {
             return GameState::LifeLost;
+        }
+
+        match game.dots_left {
+            0 => return GameState::SheetComplete,
+            74 | 174 => game.special_duration = 1000 * (10 + random::<u32>() % 3),
+            _ => (),
         }
     }
 }
@@ -898,7 +859,7 @@ fn main_game() {
                 game.repopulate_board();
                 game.initialise_ghosts();
                 game.reinitialise_player();
-                game.initialise_special();
+                game.timecum = 0;
             }
             GameState::LifeLost => {
                 render_rhs(&game);
