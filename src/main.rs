@@ -24,6 +24,7 @@ const WIDTH: usize = 28;
 
 //const SZ_SPECIAL0: [&str; 4] = ["$", "@", "%", "!"];
 const SZ_SPECIAL: [&str; 6] = [
+    //  "\u{1F440}", // eyes
     "\u{1F352}", // cherries
     "\u{1F353}", // strawberry
     "\u{1F34E}", // red apple
@@ -531,14 +532,35 @@ fn close_render() {
 }
 
 fn draw_end_game() {
-    let s = "GAME  OVER".bold().slow_blink();
+    draw_message("GAME  OVER", true);
+    // let s = "GAME  OVER".bold().slow_blink();
+    // crossterm::queue!(
+    //     stdout(),
+    //     cursor::MoveTo(9, 14),
+    //     style::PrintStyledContent(s)
+    // )
+    // .ok();
+    // stdout().flush().ok();
+}
+
+fn draw_message(s: &str, blink: bool) {
+    let col: u16 = ((WIDTH - s.len()) / 2).try_into().unwrap();
+    let s1 = match blink {
+        true => s.bold().slow_blink(),
+        false => s.bold(),
+    };
     crossterm::queue!(
         stdout(),
-        cursor::MoveTo(9, 14),
-        style::PrintStyledContent(s)
+        cursor::MoveTo(col, 14),
+        style::PrintStyledContent(s1.bold())
     )
     .ok();
     stdout().flush().ok();
+}
+
+fn draw_start_game() {
+    draw_message("READY!", false);
+    thread::sleep(time::Duration::from_millis(1000));
 }
 
 fn centered_x(s: &str) -> u16 {
@@ -660,45 +682,39 @@ fn render_rhs(game: &Game) {
     )
     .ok();
 
-    let (cols, rows) = match terminal::size() {
-        Ok((cols, rows)) => (cols, rows),
-        Err(_) => (0, 0), // panic!
-    };
+    // let (cols, rows) = match terminal::size() {
+    //     Ok((cols, rows)) => (cols, rows),
+    //     Err(_) => (0, 0), // panic!
+    // };
 
-    let i: u16 = if cols > WIDTH.try_into().unwrap() {
-        0
-    } else {
-        WIDTH.try_into().unwrap()
-    };
+    // let i: u16 = if cols > WIDTH.try_into().unwrap() {
+    //     0
+    // } else {
+    //     WIDTH.try_into().unwrap()
+    // };
 
-    //let q: usize = ncurses::COLS() as usize - i;
-    let q: u16 = cols - i;
+    // let q: u16 = cols - i;
 
-    let i1: usize = game.mq_idx % MARQUEE.len();
-    let t: usize = q as usize + game.mq_idx;
-    let i2: usize = t % MARQUEE.len();
-    if i1 < i2 {
-        // ncurses::mvprintw(
-        //     ncurses::LINES() - 1,
-        //     i.try_into().unwrap(),
-        //     &MARQUEE[i1..i2],
-        // );
-        crossterm::queue!(
-            stdout(),
-            cursor::MoveTo(i, rows - 1),
-            style::PrintStyledContent(MARQUEE[i1..i2].white())
-        )
-        .ok();
-    } else {
-        crossterm::queue!(
-            stdout(),
-            cursor::MoveTo(i, rows - 1),
-            style::PrintStyledContent(
-                format!("{}{}", &MARQUEE[i1..MARQUEE.len() - 1], &MARQUEE[0..i2]).white()
-            ),
-        )
-        .ok();
-    }
+    // let i1: usize = game.mq_idx % MARQUEE.len();
+    // let t: usize = q as usize + game.mq_idx;
+    // let i2: usize = t % MARQUEE.len();
+    // if i1 < i2 {
+    //     crossterm::queue!(
+    //         stdout(),
+    //         cursor::MoveTo(i, rows - 1),
+    //         style::PrintStyledContent(MARQUEE[i1..i2].white())
+    //     )
+    //     .ok();
+    // } else {
+    //     crossterm::queue!(
+    //         stdout(),
+    //         cursor::MoveTo(i, rows - 1),
+    //         style::PrintStyledContent(
+    //             format!("{}{}", &MARQUEE[i1..MARQUEE.len() - 1], &MARQUEE[0..i2]).white()
+    //         ),
+    //     )
+    //     .ok();
+    // }
 }
 
 fn draw_board(game: &Game, bold: bool) {
@@ -723,7 +739,7 @@ fn draw_board(game: &Game, bold: bool) {
         .ok();
     });
 
-    // print separately - because not styled
+    // print special separately - because not styled
     if game.special_duration > 0 {
         game.board
             .iter()
@@ -871,6 +887,7 @@ fn main_game() {
     render_game_info();
     loop {
         draw_dynamic(&game);
+        draw_start_game();
         thread::sleep(time::Duration::from_millis(200));
         match game_loop(&mut game) {
             GameState::UserQuit => return,
