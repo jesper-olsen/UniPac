@@ -453,6 +453,9 @@ impl Game {
                             let (_ch, bonus) = level2special(self.level);
                             self.player.score += bonus;
                             self.special_duration = 0;
+
+                            draw_message(format!("{}", bonus).as_str(), false);
+                            thread::sleep(time::Duration::from_millis(100));
                         }
                     }
                     _ => (),
