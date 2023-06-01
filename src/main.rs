@@ -253,6 +253,10 @@ impl Game {
                 } else {
                     self.am.play("Audio/eatghost.ogg".to_string());
                     self.player.score += self.player.next_ghost_score;
+
+                    draw_message_at(g.pos, format!("{}", self.player.next_ghost_score).as_str());
+                    thread::sleep(time::Duration::from_millis(150));
+
                     self.player.next_ghost_score *= 2;
                     // todo: trace eyes back to home \u{1F440}", // eyes
                     g.active = false;
@@ -455,7 +459,7 @@ impl Game {
                             self.special_duration = 0;
 
                             draw_message(format!("{}", bonus).as_str(), false);
-                            thread::sleep(time::Duration::from_millis(100));
+                            thread::sleep(time::Duration::from_millis(150));
                         }
                     }
                     _ => (),
@@ -528,6 +532,20 @@ fn draw_message(s: &str, blink: bool) {
         stdout(),
         cursor::MoveTo(col, 14),
         style::PrintStyledContent(s1.bold())
+    )
+    .ok();
+    stdout().flush().ok();
+}
+
+fn draw_message_at(pos: usize, s: &str) {
+    let (mut col, row) = index2xy(pos);
+    if col > WIDTH as u16 - 4 {
+        col = WIDTH as u16 - 4;
+    }
+    crossterm::queue!(
+        stdout(),
+        cursor::MoveTo(col, row),
+        style::PrintStyledContent(s.bold())
     )
     .ok();
     stdout().flush().ok();
