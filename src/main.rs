@@ -605,6 +605,31 @@ fn another_game() -> bool {
     }
 }
 
+fn pause() -> bool {
+    // let s1 = "Paused";
+    // let s2 = "space";
+
+    // crossterm::queue!(
+    //     stdout(),
+    //     cursor::MoveTo(centered_x(s1), 12),
+    //     style::PrintStyledContent(s1.red()),
+    //     cursor::MoveTo(centered_x(s2), 14),
+    //     style::PrintStyledContent(s2.red()),
+    // )
+    // .ok();
+    // stdout().flush().ok();
+
+    loop {
+        match read() {
+            Ok(Event::Key(KeyEvent {
+                code: KeyCode::Char(' '),
+                ..
+            })) => return true,
+            _ => (),
+        }
+    }
+}
+
 fn render_game_info() {
     let s1: &str = "UniPac - Unicode-powered Pacman";
     let s2 = "Rusty Edition 2023 ";
@@ -843,6 +868,13 @@ fn game_loop(game: &mut Game) -> GameState {
                     code: KeyCode::Down,
                     ..
                 })) => Direction::Down,
+                Ok(Event::Key(KeyEvent {
+                    code: KeyCode::Char(' '),
+                    ..
+                })) => {
+                    pause();
+                    game.player.last_input_direction
+                }
                 _ => game.player.last_input_direction,
             };
         }
