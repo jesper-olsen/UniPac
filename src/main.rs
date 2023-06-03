@@ -190,6 +190,7 @@ impl Game {
             "Audio/die.ogg",
             "Audio/eatpill.ogg",
             "Audio/eatghost.ogg",
+            "Audio/extra lives.ogg",
             "Audio/opening_song.ogg",
         ]
         .iter()
@@ -470,6 +471,7 @@ impl Game {
 
         if prev_score < 10000 && self.player.score >= 10000 && self.lives < MAX_PACMAN_LIVES {
             self.lives += 1;
+            self.am.play("Audio/extra lives.ogg".to_string());
         }
 
         if self.player.score > self.high_score {
@@ -602,6 +604,7 @@ fn another_game() -> bool {
         }
     }
 }
+
 fn render_game_info() {
     let s1: &str = "UniPac - Unicode-powered Pacman";
     let s2 = "Rusty Edition 2023 ";
@@ -636,22 +639,23 @@ fn animate_dead_player(game: &Game) {
 }
 
 fn render_rhs(game: &Game) {
-    let pacimg = ["/-\\", "|'<", "\\_/", "   ", "   ", "   "];
-    // need to remove the old pacman character in some cases
-    for i in 0..MAX_PACMAN_LIVES {
-        for j in 0..3 {
-            let q = if game.lives > i { 0 } else { 3 };
-            crossterm::queue!(
-                stdout(),
-                cursor::MoveTo(
-                    (i * 5 + 30).try_into().unwrap(),
-                    (16 + j).try_into().unwrap()
-                ),
-                style::PrintStyledContent(pacimg[(j + q) as usize].bold().yellow()),
-            )
-            .ok();
-        }
-    }
+    // draw lives - one pacman for each
+    // let pacimg = ["/-\\", "|'<", "\\_/", "   ", "   ", "   "];
+    // // need to remove the old pacman character in some cases
+    // for i in 0..MAX_PACMAN_LIVES {
+    //     for j in 0..3 {
+    //         let q = if game.lives > i { 0 } else { 3 };
+    //         crossterm::queue!(
+    //             stdout(),
+    //             cursor::MoveTo(
+    //                 (i * 5 + 30).try_into().unwrap(),
+    //                 (16 + j).try_into().unwrap()
+    //             ),
+    //             style::PrintStyledContent(pacimg[(j + q) as usize].bold().yellow()),
+    //         )
+    //         .ok();
+    //     }
+    // }
 
     let i = centered_x("Score : 123456"); /* get a pos base on av score digits */
     crossterm::queue!(
@@ -661,9 +665,17 @@ fn render_rhs(game: &Game) {
         cursor::MoveTo(i, 6.try_into().unwrap()),
         style::PrintStyledContent(format!("High  : {}", game.high_score).bold().white()),
         cursor::MoveTo(i, 8.try_into().unwrap()),
-        style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
+        style::PrintStyledContent(format!("Level : {}", game.level + 1).bold().white()),
     )
     .ok();
+
+    let (ch, _bonus) = level2special(game.level);
+    draw_message_at(25 * WIDTH - 1, ch);
+
+    let s = vec!['\u{1F642}'; game.lives as usize];
+    let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
+    let s2: String = s.into_iter().chain(s1.into_iter()).collect::<String>();
+    draw_message_at(24 * WIDTH, &s2);
 
     // let (cols, rows) = match terminal::size() {
     //     Ok((cols, rows)) => (cols, rows),
