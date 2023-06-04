@@ -303,26 +303,15 @@ impl Game {
             } else {
                 match g.ghost_state {
                     GhostState::Shuffle => {
-                        let idx = g.pos - WIDTH;
-                        if random::<u8>() % 2 == 0 && self.board[idx] == '-' {
-                            g.ghost_state = GhostState::Gateway;
-                            g.pos = idx;
-                        } else {
-                            match random::<u8>() % 3 {
-                                0 => {
-                                    let idx = g.pos - 1;
-                                    if self.board[idx] == 'H' {
-                                        g.pos = idx;
-                                    }
-                                }
-                                1 => {
-                                    let idx = g.pos + 1;
-                                    if self.board[idx] == 'H' {
-                                        g.pos = idx;
-                                    }
-                                }
-                                _ => (),
+                        let a: [usize; 4] = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
+                        let idx = a[random::<usize>() % a.len()];
+                        match self.board[idx] {
+                            'H' => g.pos = idx,
+                            '-' => {
+                                g.pos = idx;
+                                g.ghost_state = GhostState::Gateway;
                             }
+                            _ => (),
                         }
                     }
                     GhostState::Gateway => {
@@ -481,11 +470,17 @@ impl Game {
 
     fn initialise_ghosts(&mut self) {
         const MAX_GHOSTS: usize = 4;
+        const A: [usize; 4] = [
+            10 * WIDTH + 12,
+            10 * WIDTH + 14,
+            11 * WIDTH + 12,
+            11 * WIDTH + 14,
+        ];
         self.ghosts = vec![];
         for i in 0..MAX_GHOSTS {
             self.ghosts.push(Ghost {
-                active: i < MAX_GHOSTS - 1,
-                pos: 10 * WIDTH + 12 + i * 2,
+                active: true, //i < MAX_GHOSTS - 1,
+                pos: A[i],
                 direction: Direction::Left,
                 edible_duration: 0,
                 ghost_state: GhostState::Shuffle,
