@@ -664,7 +664,7 @@ fn animate_dead_player(game: &Game) {
 }
 
 fn render_rhs(game: &Game) {
-    // draw lives - one pacman for each
+    // draw lives - ascii art, one pacman for each
     // let pacimg = ["/-\\", "|'<", "\\_/", "   ", "   ", "   "];
     // // need to remove the old pacman character in some cases
     // for i in 0..MAX_PACMAN_LIVES {
@@ -739,7 +739,7 @@ fn render_rhs(game: &Game) {
 
 fn draw_board(game: &Game, bold: bool) {
     game.board.iter().enumerate().for_each(|(i, c)| {
-        let mut ch = match *c {
+        let s = match *c {
             '#' => "#".blue(),
             '.' => ".".white(),
             // '.' => ".".cyan(),
@@ -747,19 +747,17 @@ fn draw_board(game: &Game, bold: bool) {
             'P' => "*".slow_blink(),
             _ => " ".white(),
         };
-        if bold {
-            ch = ch.bold();
-        }
+        let s = if bold { s.bold() } else { s };
         let (col, row) = index2xy(i);
         crossterm::queue!(
             stdout(),
             cursor::MoveTo(col, row),
-            style::PrintStyledContent(ch),
+            style::PrintStyledContent(s),
         )
         .ok();
     });
 
-    // print special separately - because not styled
+    // print special separately - because not rendered correctly otherwise (is wider than one cell)
     if game.special_duration > 0 {
         let (s, _bonus) = level2special(game.level);
         game.board
