@@ -119,25 +119,17 @@ enum GhostState {
     Shuffle,
     Gateway,
     Outside,
+    Dead,
 }
 
 struct Ghost {
     pos: usize,
-    active: bool,
     ghost_state: GhostState,
     edible_duration: u32,
     direction: Direction,
 }
 
-impl Ghost {
-    fn activate(&mut self) {
-        self.pos = 10 * WIDTH + 12;
-        self.direction = Direction::Left;
-        self.active = true;
-        self.edible_duration = 0;
-        self.ghost_state = GhostState::Shuffle;
-    }
-}
+impl Ghost {}
 
 struct Player {
     pos: usize,
@@ -238,7 +230,7 @@ impl Game {
     fn ghosts_are_edible(&mut self, duration: u32) {
         self.ghosts
             .iter_mut()
-            .filter(|g| g.active && g.ghost_state == GhostState::Outside)
+            .filter(|g| g.ghost_state == GhostState::Outside)
             .for_each(|g| {
                 g.edible_duration += duration;
             })
@@ -247,7 +239,7 @@ impl Game {
     fn check_player_vs_ghosts(&mut self) {
         self.ghosts
             .iter_mut()
-            .filter(|g| g.active && g.pos == self.player.pos)
+            .filter(|g| g.ghost_state != GhostState::Dead && g.pos == self.player.pos)
             .for_each(|g| {
                 if g.edible_duration == 0 {
                     self.player.dead = true;
@@ -260,7 +252,7 @@ impl Game {
 
                     self.player.next_ghost_score *= 2;
                     // todo: trace eyes back to home \u{1F440}", // eyes
-                    g.active = false;
+                    g.ghost_state = GhostState::Dead;
                 }
             })
     }
@@ -290,92 +282,124 @@ impl Game {
     }
 
     fn update_ghosts(&mut self, telaps: u32) {
+        let opposite_dir: HashMap<Direction, Direction> = HashMap::from([
+            (Direction::Right, Direction::Left),
+            (Direction::Left, Direction::Right),
+            (Direction::Down, Direction::Up),
+            (Direction::Up, Direction::Down),
+        ]);
+
         self.ghosts.iter_mut().for_each(|g| {
             if g.edible_duration < telaps {
                 g.edible_duration = 0;
             } else {
                 g.edible_duration -= telaps;
             }
-            if !g.active {
-                if random::<u8>() % 30 < 2 {
-                    g.activate();
+            match g.ghost_state {
+                GhostState::Shuffle => {
+                    let a: [usize; 4] = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
+                    let idx = a[random::<usize>() % a.len()];
+                    match self.board[idx] {
+                        'H' => g.pos = idx,
+                        '-' => {
+                            g.pos = idx;
+                            g.ghost_state = GhostState::Gateway;
+                        }
+                        _ => (),
+                    }
                 }
-            } else {
-                match g.ghost_state {
-                    GhostState::Shuffle => {
-                        let a: [usize; 4] = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
-                        let idx = a[random::<usize>() % a.len()];
-                        match self.board[idx] {
-                            'H' => g.pos = idx,
-                            '-' => {
-                                g.pos = idx;
-                                g.ghost_state = GhostState::Gateway;
-                            }
-                            _ => (),
-                        }
+                GhostState::Gateway => {
+                    g.pos -= WIDTH;
+                    g.ghost_state = GhostState::Outside;
+                    g.direction = match random::<u8>() % 2 {
+                        0 => Direction::Left,
+                        _ => Direction::Right,
                     }
-                    GhostState::Gateway => {
-                        g.pos -= WIDTH;
-                        g.ghost_state = GhostState::Outside;
-                        g.direction = match random::<u8>() % 2 {
-                            0 => Direction::Left,
-                            _ => Direction::Right,
-                        }
-                    }
-                    GhostState::Outside => {
-                        let m: HashMap<Direction, usize> = [
+                }
+
+                GhostState::Dead => {
+                    // if at house gate - go in
+                    // otherwise - don't go back, go in direction of target
+                    //if g.pos==8*WIDTH+13
+                    if g.pos == 8 * WIDTH + 13 || g.pos == 8 * WIDTH + 14 {
+                        g.pos += WIDTH;
+                        g.direction = Direction::Down;
+                    } else if g.pos == 9 * WIDTH + 13 || g.pos == 9 * WIDTH + 14 {
+                        g.pos += WIDTH;
+                        g.ghost_state = GhostState::Shuffle;
+                    } else {
+                        let (tcol, trow) = index2xy(8 * WIDTH + 13);
+
+                        //let v = Vec::new();
+                        let (d, p, _dist) = [
                             (Direction::Right, g.pos + 1),
                             (Direction::Left, g.pos - 1),
                             (Direction::Down, g.pos + WIDTH),
                             (Direction::Up, g.pos - WIDTH),
                         ]
                         .iter()
+                        .filter(|(d, _p)| *d != opposite_dir[&g.direction]) // not go back
+                        .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                         .map(|(d, p)| {
-                            let col = *p % WIDTH;
-                            let row = *p / WIDTH;
-                            if col == 0 {
-                                // tunnel
-                                (*d, row * WIDTH + WIDTH - 1)
-                            } else if col == WIDTH - 1 {
-                                // tunnel
-                                (*d, row * WIDTH)
-                            } else {
-                                (*d, *p)
-                            }
+                            let (col, row) = index2xy(*p);
+                            (*d, *p, tcol.abs_diff(col) + trow.abs_diff(row))
                         })
-                        .filter(|(_, pos)| matches!(self.board[*pos], 'P' | ' ' | '.' | '$'))
-                        .collect();
-
-                        if random::<u8>() % 34 == 0 && g.pos != self.player.pos {
-                            // random direction
-                            let keys: Vec<&Direction> = m.keys().collect();
-                            let key = keys[random::<usize>() % keys.len()];
-                            g.pos = m[key];
-                            g.direction = *key;
-                        } else if m.contains_key(&g.direction) {
-                            // same direction
-                            g.pos = m[&g.direction];
+                        .min_by(|x, y| x.2.cmp(&y.2))
+                        .unwrap();
+                        //.for_each(drop)
+                        g.direction = d;
+                        g.pos = p;
+                    }
+                }
+                GhostState::Outside => {
+                    let m: HashMap<Direction, usize> = [
+                        (Direction::Right, g.pos + 1),
+                        (Direction::Left, g.pos - 1),
+                        (Direction::Down, g.pos + WIDTH),
+                        (Direction::Up, g.pos - WIDTH),
+                    ]
+                    .iter()
+                    .map(|(d, p)| {
+                        let col = *p % WIDTH;
+                        let row = *p / WIDTH;
+                        if col == 0 {
+                            // tunnel
+                            (*d, row * WIDTH + WIDTH - 1)
+                        } else if col == WIDTH - 1 {
+                            // tunnel
+                            (*d, row * WIDTH)
                         } else {
-                            // Have to change direction
-                            let l = match g.direction {
-                                Direction::Left | Direction::Right => {
-                                    [Direction::Up, Direction::Down]
-                                }
-                                Direction::Up | Direction::Down => {
-                                    [Direction::Left, Direction::Right]
-                                }
-                            };
-                            let idx = random::<usize>() % 2;
-                            if m.contains_key(&l[idx]) {
-                                g.direction = l[idx];
-                            } else {
-                                g.direction = l[(idx + 1) % 2];
-                            }
-                            g.pos = m[&g.direction];
+                            (*d, *p)
                         }
-                    } // Outside
-                } // match ghost_state
-            }
+                    })
+                    .filter(|(_, pos)| matches!(self.board[*pos], 'P' | ' ' | '.' | '$'))
+                    .collect();
+
+                    if random::<u8>() % 34 == 0 && g.pos != self.player.pos {
+                        // random direction
+                        let keys: Vec<&Direction> = m.keys().collect();
+                        let key = keys[random::<usize>() % keys.len()];
+                        g.pos = m[key];
+                        g.direction = *key;
+                    } else if m.contains_key(&g.direction) {
+                        // same direction
+                        g.pos = m[&g.direction];
+                    } else {
+                        // Have to change direction
+                        let l = match g.direction {
+                            Direction::Left | Direction::Right => [Direction::Up, Direction::Down],
+                            Direction::Up | Direction::Down => [Direction::Left, Direction::Right],
+                        };
+                        let idx = random::<usize>() % 2;
+                        if m.contains_key(&l[idx]) {
+                            g.direction = l[idx];
+                        } else {
+                            g.direction = l[(idx + 1) % 2];
+                        }
+                        g.pos = m[&g.direction];
+                    }
+                } // Outside
+            } // match ghost_state
         })
     }
 
@@ -479,7 +503,6 @@ impl Game {
         self.ghosts = vec![];
         for i in 0..MAX_GHOSTS {
             self.ghosts.push(Ghost {
-                active: true, //i < MAX_GHOSTS - 1,
                 pos: A[i],
                 direction: Direction::Left,
                 edible_duration: 0,
@@ -792,29 +815,30 @@ fn draw_player(game: &Game) {
 }
 
 fn draw_ghosts(game: &Game) {
-    game.ghosts
-        .iter()
-        .enumerate()
-        .filter(|(_, g)| g.active)
-        .for_each(|(i, g)| {
-            let s = if g.edible_duration > 0 {
-                if g.edible_duration < 2000 {
-                    //"\u{1F631}".rapid_blink() // looks bad
-                    "\u{1F47D}" // alien
+    game.ghosts.iter().enumerate().for_each(|(i, g)| {
+        let s = match g.ghost_state {
+            GhostState::Dead => "\u{1F440}",
+            _ => {
+                if game.board[g.pos] != 'H' && g.edible_duration > 0 {
+                    if g.edible_duration < 2000 {
+                        //"\u{1F631}".rapid_blink() // looks bad
+                        "\u{1F47D}" // alien
+                    } else {
+                        "\u{1F631}" // Scream
+                    }
                 } else {
-                    "\u{1F631}" // Scream
+                    match i {
+                        0 => "\u{1F47A}", // Goblin
+                        1 => "\u{1F479}", // Ogre
+                        2 => "\u{1F47B}", // Ghost
+                        _ => "\u{1F383}", // Jack-O-Lantern
+                    }
                 }
-            } else {
-                match i {
-                    0 => "\u{1F47A}", // Goblin
-                    1 => "\u{1F479}", // Ogre
-                    2 => "\u{1F47B}", // Ghost
-                    _ => "\u{1F383}", // Jack-O-Lantern
-                }
-            };
-            let (col, row) = index2xy(g.pos);
-            crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),).ok();
-        });
+            }
+        };
+        let (col, row) = index2xy(g.pos);
+        crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),).ok();
+    });
 }
 
 //  The animated death and flashing screen happen syncronously. To be done
