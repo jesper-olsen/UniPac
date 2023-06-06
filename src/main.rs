@@ -350,51 +350,81 @@ impl Game {
                     }
                 }
                 GhostState::Outside => {
-                    let m: HashMap<Direction, usize> = [
-                        (Direction::Right, g.pos + 1),
-                        (Direction::Left, g.pos - 1),
-                        (Direction::Down, g.pos + WIDTH),
-                        (Direction::Up, g.pos - WIDTH),
-                    ]
-                    .iter()
-                    .map(|(d, p)| {
-                        let col = *p % WIDTH;
-                        let row = *p / WIDTH;
-                        if col == 0 {
-                            // tunnel
-                            (*d, row * WIDTH + WIDTH - 1)
-                        } else if col == WIDTH - 1 {
-                            // tunnel
-                            (*d, row * WIDTH)
-                        } else {
-                            (*d, *p)
-                        }
-                    })
-                    .filter(|(_, pos)| matches!(self.board[*pos], 'P' | ' ' | '.' | '$'))
-                    .collect();
+                    if g.edible_duration > 0 {
+                        if random::<u8>() % 3 == 0 {
+                            // random => slowdown
+                            let (tcol, trow) = index2xy(self.player.pos);
 
-                    if random::<u8>() % 34 == 0 && g.pos != self.player.pos {
-                        // random direction
-                        let keys: Vec<&Direction> = m.keys().collect();
-                        let key = keys[random::<usize>() % keys.len()];
-                        g.pos = m[key];
-                        g.direction = *key;
-                    } else if m.contains_key(&g.direction) {
-                        // same direction
-                        g.pos = m[&g.direction];
-                    } else {
-                        // Have to change direction
-                        let l = match g.direction {
-                            Direction::Left | Direction::Right => [Direction::Up, Direction::Down],
-                            Direction::Up | Direction::Down => [Direction::Left, Direction::Right],
-                        };
-                        let idx = random::<usize>() % 2;
-                        if m.contains_key(&l[idx]) {
-                            g.direction = l[idx];
-                        } else {
-                            g.direction = l[(idx + 1) % 2];
+                            //flee pacman
+                            let (d, p, _dist) = [
+                                (Direction::Right, g.pos + 1),
+                                (Direction::Left, g.pos - 1),
+                                (Direction::Down, g.pos + WIDTH),
+                                (Direction::Up, g.pos - WIDTH),
+                            ]
+                            .iter()
+                            //.filter(|(d, _p)| *d != opposite_dir[&g.direction]) // not go back
+                            .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+                            .map(|(d, p)| {
+                                let (col, row) = index2xy(*p);
+                                (*d, *p, tcol.abs_diff(col) + trow.abs_diff(row))
+                            })
+                            .max_by(|x, y| x.2.cmp(&y.2))
+                            .unwrap();
+                            g.direction = d;
+                            g.pos = p;
                         }
-                        g.pos = m[&g.direction];
+                    } else {
+                        let m: HashMap<Direction, usize> = [
+                            (Direction::Right, g.pos + 1),
+                            (Direction::Left, g.pos - 1),
+                            (Direction::Down, g.pos + WIDTH),
+                            (Direction::Up, g.pos - WIDTH),
+                        ]
+                        .iter()
+                        .map(|(d, p)| {
+                            let col = *p % WIDTH;
+                            let row = *p / WIDTH;
+                            if col == 0 {
+                                // tunnel
+                                (*d, row * WIDTH + WIDTH - 1)
+                            } else if col == WIDTH - 1 {
+                                // tunnel
+                                (*d, row * WIDTH)
+                            } else {
+                                (*d, *p)
+                            }
+                        })
+                        .filter(|(_, pos)| matches!(self.board[*pos], 'P' | ' ' | '.' | '$'))
+                        .collect();
+
+                        if random::<u8>() % 34 == 0 && g.pos != self.player.pos {
+                            // random direction
+                            let keys: Vec<&Direction> = m.keys().collect();
+                            let key = keys[random::<usize>() % keys.len()];
+                            g.pos = m[key];
+                            g.direction = *key;
+                        } else if m.contains_key(&g.direction) {
+                            // same direction
+                            g.pos = m[&g.direction];
+                        } else {
+                            // Have to change direction
+                            let l = match g.direction {
+                                Direction::Left | Direction::Right => {
+                                    [Direction::Up, Direction::Down]
+                                }
+                                Direction::Up | Direction::Down => {
+                                    [Direction::Left, Direction::Right]
+                                }
+                            };
+                            let idx = random::<usize>() % 2;
+                            if m.contains_key(&l[idx]) {
+                                g.direction = l[idx];
+                            } else {
+                                g.direction = l[(idx + 1) % 2];
+                            }
+                            g.pos = m[&g.direction];
+                        }
                     }
                 } // Outside
             } // match ghost_state
