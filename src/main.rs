@@ -22,7 +22,7 @@ use kira::{
 const MAX_PACMAN_LIVES: u32 = 6;
 const WIDTH: usize = 28;
 
-fn level2special(level: u32) -> (&'static str, u32) {
+fn level2fruit(level: u32) -> (&'static str, u32) {
     match level {
         0 => ("\u{1F352}", 100),        // cherries
         1 => ("\u{1F353}", 300),        // strawberry
@@ -168,7 +168,7 @@ struct Game {
     level: u32,
     ghosts: Vec<Ghost>,
     pill_duration: u32,
-    special_duration: u32,
+    fruit_duration: u32,
     am: AM,
 }
 
@@ -204,7 +204,7 @@ impl Game {
             high_score: 9710,
             lives: 3,
             player: Player::new(),
-            special_duration: 0,
+            fruit_duration: 0,
             am: AM { manager, sounds },
         };
 
@@ -257,17 +257,17 @@ impl Game {
             })
     }
 
-    fn update_special(&mut self, telaps: u32) {
+    fn update_fruit(&mut self, telaps: u32) {
         self.timecum += telaps;
         if self.timecum > 500 {
             self.timecum = 0;
         }
 
-        if self.special_duration > 0 {
-            if self.special_duration < telaps {
-                self.special_duration = 0;
+        if self.fruit_duration > 0 {
+            if self.fruit_duration < telaps {
+                self.fruit_duration = 0;
             } else {
-                self.special_duration -= telaps;
+                self.fruit_duration -= telaps;
             }
         }
     }
@@ -320,7 +320,6 @@ impl Game {
                 GhostState::Dead => {
                     // if at house gate - go in
                     // otherwise - don't go back, go in direction of target
-                    //if g.pos==8*WIDTH+13
                     if g.pos == 8 * WIDTH + 13 || g.pos == 8 * WIDTH + 14 {
                         g.pos += WIDTH;
                         g.direction = Direction::Down;
@@ -330,7 +329,6 @@ impl Game {
                     } else {
                         let (tcol, trow) = index2xy(8 * WIDTH + 13);
 
-                        //let v = Vec::new();
                         let (d, p, _dist) = [
                             (Direction::Right, g.pos + 1),
                             (Direction::Left, g.pos - 1),
@@ -408,7 +406,7 @@ impl Game {
         self.check_player_vs_ghosts();
         self.update_ghosts(dur);
         self.check_player_vs_ghosts();
-        self.update_special(dur);
+        self.update_fruit(dur);
     }
 
     fn next_player_pos(&self, d: Direction) -> usize {
@@ -466,11 +464,11 @@ impl Game {
                         self.player.next_ghost_score = 200;
                     }
                     '$' => {
-                        if self.special_duration > 0 {
+                        if self.fruit_duration > 0 {
                             self.am.play("Audio/eatpill.ogg".to_string());
-                            let (_ch, bonus) = level2special(self.level);
+                            let (_ch, bonus) = level2fruit(self.level);
                             self.player.score += bonus;
-                            self.special_duration = 0;
+                            self.fruit_duration = 0;
 
                             draw_message(format!("{}", bonus).as_str(), false);
                             thread::sleep(time::Duration::from_millis(150));
@@ -493,7 +491,6 @@ impl Game {
     } // update_player
 
     fn initialise_ghosts(&mut self) {
-        const MAX_GHOSTS: usize = 4;
         const A: [usize; 4] = [
             10 * WIDTH + 12,
             10 * WIDTH + 14,
@@ -501,7 +498,7 @@ impl Game {
             11 * WIDTH + 14,
         ];
         self.ghosts = vec![];
-        for i in 0..MAX_GHOSTS {
+        for i in 0..A.len() {
             self.ghosts.push(Ghost {
                 pos: A[i],
                 direction: Direction::Left,
@@ -712,7 +709,7 @@ fn render_rhs(game: &Game) {
     )
     .ok();
 
-    let (ch, _bonus) = level2special(game.level);
+    let (ch, _bonus) = level2fruit(game.level);
     draw_message_at(25 * WIDTH - 1, ch);
 
     let s = vec!['\u{1F642}'; game.lives as usize];
@@ -760,8 +757,6 @@ fn draw_board(game: &Game, bold: bool) {
         let s = match *c {
             '#' => "#".blue(),
             '.' => ".".white(),
-            // '.' => ".".cyan(),
-            //'P' => "\u{1F36A}".slow_blink(), // cookie - too wide
             'P' => "*".slow_blink(),
             _ => " ".white(),
         };
@@ -775,9 +770,9 @@ fn draw_board(game: &Game, bold: bool) {
         .ok();
     });
 
-    // print special separately - because not rendered correctly otherwise (is wider than one cell)
-    if game.special_duration > 0 {
-        let (s, _bonus) = level2special(game.level);
+    // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
+    if game.fruit_duration > 0 {
+        let (s, _bonus) = level2fruit(game.level);
         game.board
             .iter()
             .enumerate()
@@ -906,7 +901,7 @@ fn game_loop(game: &mut Game) -> GameState {
 
         match game.dots_left {
             0 => return GameState::SheetComplete,
-            74 | 174 => game.special_duration = 1000 * (10 + random::<u32>() % 3),
+            74 | 174 => game.fruit_duration = 1000 * (10 + random::<u32>() % 3),
             _ => (),
         }
     }
