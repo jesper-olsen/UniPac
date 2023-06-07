@@ -651,19 +651,7 @@ fn another_game() -> bool {
 }
 
 fn pause() -> bool {
-    // let s1 = "Paused";
-    // let s2 = "space";
-
-    // crossterm::queue!(
-    //     stdout(),
-    //     cursor::MoveTo(centered_x(s1), 12),
-    //     style::PrintStyledContent(s1.red()),
-    //     cursor::MoveTo(centered_x(s2), 14),
-    //     style::PrintStyledContent(s2.red()),
-    // )
-    // .ok();
-    // stdout().flush().ok();
-
+    draw_message("PAUSED", false);
     loop {
         match read() {
             Ok(Event::Key(KeyEvent {
