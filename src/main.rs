@@ -10,6 +10,8 @@ use crossterm::{
 use std::io::{stdout, Write};
 
 use rand::random;
+use rand::seq::IteratorRandom;
+
 use std::collections::HashMap;
 use std::time::Instant;
 use std::{thread, time};
@@ -291,11 +293,11 @@ impl Game {
         ]);
 
         self.ghosts.iter_mut().for_each(|g| {
-            if g.edible_duration < telaps {
-                g.edible_duration = 0;
+            g.edible_duration = if g.edible_duration < telaps {
+                0
             } else {
-                g.edible_duration -= telaps;
-            }
+                g.edible_duration - telaps
+            };
             match g.ghost_state {
                 GhostState::Shuffle => {
                     let a: [usize; 4] = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
@@ -328,7 +330,7 @@ impl Game {
                         g.pos += WIDTH;
                         g.ghost_state = GhostState::Shuffle;
                     } else {
-                        let (d, p, _dist) = [
+                        (g.direction, g.pos, _) = [
                             Direction::Right,
                             Direction::Left,
                             Direction::Down,
@@ -357,9 +359,6 @@ impl Game {
                         })
                         .min_by(|x, y| x.2.cmp(&y.2))
                         .unwrap();
-                        //.for_each(drop)
-                        g.direction = d;
-                        g.pos = p;
                     }
                 }
                 GhostState::Outside => {
@@ -403,58 +402,33 @@ impl Game {
                             g.pos = p;
                         }
                     } else {
-                        let m: HashMap<Direction, usize> = [
-                            (Direction::Right, g.pos + 1),
-                            (Direction::Left, g.pos - 1),
-                            (Direction::Down, g.pos + WIDTH),
-                            (Direction::Up, g.pos - WIDTH),
+                        // scatter mode - todo chase
+                        let mut rng = rand::thread_rng();
+
+                        (g.direction, g.pos) = [
+                            Direction::Right,
+                            Direction::Left,
+                            Direction::Down,
+                            Direction::Up,
                         ]
                         .iter()
-                        .map(|(d, p)| {
-                            let (col, row) = index2xy(*p);
+                        .map(|d| {
+                            let (col, row) = index2xy(g.pos);
                             let col: usize = col.try_into().unwrap();
                             let row: usize = row.try_into().unwrap();
-
-                            if col == 0 {
-                                // tunnel
-                                (*d, row * WIDTH + WIDTH - 1)
-                            } else if col == WIDTH - 1 {
-                                // tunnel
-                                (*d, row * WIDTH)
-                            } else {
-                                (*d, *p)
+                            match (d, col) {
+                                (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
+                                (Direction::Right, _) => (Direction::Right, g.pos + 1),
+                                (Direction::Left, 0) => (Direction::Left, row * WIDTH + WIDTH - 1),
+                                (Direction::Left, _) => (Direction::Left, g.pos - 1),
+                                (Direction::Down, _) => (Direction::Down, g.pos + WIDTH),
+                                (Direction::Up, _) => (Direction::Up, g.pos - WIDTH),
                             }
                         })
-                        .filter(|(_, pos)| matches!(self.board[*pos], 'P' | ' ' | '.' | '$'))
-                        .collect();
-
-                        if random::<u8>() % 34 == 0 && g.pos != self.player.pos {
-                            // random direction
-                            let keys: Vec<&Direction> = m.keys().collect();
-                            let key = keys[random::<usize>() % keys.len()];
-                            g.pos = m[key];
-                            g.direction = *key;
-                        } else if m.contains_key(&g.direction) {
-                            // same direction
-                            g.pos = m[&g.direction];
-                        } else {
-                            // Have to change direction
-                            let l = match g.direction {
-                                Direction::Left | Direction::Right => {
-                                    [Direction::Up, Direction::Down]
-                                }
-                                Direction::Up | Direction::Down => {
-                                    [Direction::Left, Direction::Right]
-                                }
-                            };
-                            let idx = random::<usize>() % 2;
-                            if m.contains_key(&l[idx]) {
-                                g.direction = l[idx];
-                            } else {
-                                g.direction = l[(idx + 1) % 2];
-                            }
-                            g.pos = m[&g.direction];
-                        }
+                        .filter(|(d, _p)| *d != opposite_dir[&g.direction]) // not go back
+                        .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+                        .choose(&mut rng)
+                        .unwrap();
                     }
                 } // Outside
             } // match ghost_state
@@ -557,9 +531,9 @@ impl Game {
             11 * WIDTH + 14,
         ];
         self.ghosts = vec![];
-        for i in 0..A.len() {
+        for p in &A {
             self.ghosts.push(Ghost {
-                pos: A[i],
+                pos: *p,
                 direction: Direction::Left,
                 edible_duration: 0,
                 ghost_state: GhostState::Shuffle,
@@ -682,6 +656,13 @@ fn another_game() -> bool {
 fn pause() -> bool {
     draw_message("PAUSED", false);
     loop {
+        // if let Ok(Event::Key(KeyEvent {
+        //     code: KeyCode::Char(' '),
+        //     ..
+        // })) = read()
+        // {
+        //     return true;
+        // }
         match read() {
             Ok(Event::Key(KeyEvent {
                 code: KeyCode::Char(' '),
