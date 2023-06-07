@@ -21,6 +21,7 @@ use kira::{
 
 const MAX_PACMAN_LIVES: u32 = 6;
 const WIDTH: usize = 28;
+const WIDTHM1: usize = WIDTH - 1;
 
 fn level2fruit(level: u32) -> (&'static str, u32) {
     match level {
@@ -327,20 +328,32 @@ impl Game {
                         g.pos += WIDTH;
                         g.ghost_state = GhostState::Shuffle;
                     } else {
-                        let (tcol, trow) = index2xy(8 * WIDTH + 13);
-
                         let (d, p, _dist) = [
-                            (Direction::Right, g.pos + 1),
-                            (Direction::Left, g.pos - 1),
-                            (Direction::Down, g.pos + WIDTH),
-                            (Direction::Up, g.pos - WIDTH),
+                            Direction::Right,
+                            Direction::Left,
+                            Direction::Down,
+                            Direction::Up,
                         ]
                         .iter()
+                        .map(|d| {
+                            let (col, row) = index2xy(g.pos);
+                            let col: usize = col.try_into().unwrap();
+                            let row: usize = row.try_into().unwrap();
+                            match (d, col) {
+                                (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
+                                (Direction::Right, _) => (Direction::Right, g.pos + 1),
+                                (Direction::Left, 0) => (Direction::Left, row * WIDTH + WIDTH - 1),
+                                (Direction::Left, _) => (Direction::Left, g.pos - 1),
+                                (Direction::Down, _) => (Direction::Down, g.pos + WIDTH),
+                                (Direction::Up, _) => (Direction::Up, g.pos - WIDTH),
+                            }
+                        })
                         .filter(|(d, _p)| *d != opposite_dir[&g.direction]) // not go back
                         .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                         .map(|(d, p)| {
-                            let (col, row) = index2xy(*p);
-                            (*d, *p, tcol.abs_diff(col) + trow.abs_diff(row))
+                            let (col, row) = index2xy(p);
+                            let (tcol, trow) = index2xy(8 * WIDTH + 13);
+                            (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
                         })
                         .min_by(|x, y| x.2.cmp(&y.2))
                         .unwrap();
@@ -353,21 +366,36 @@ impl Game {
                     if g.edible_duration > 0 {
                         if random::<u8>() % 3 == 0 {
                             // random => slowdown
-                            let (tcol, trow) = index2xy(self.player.pos);
 
                             //flee pacman
                             let (d, p, _dist) = [
-                                (Direction::Right, g.pos + 1),
-                                (Direction::Left, g.pos - 1),
-                                (Direction::Down, g.pos + WIDTH),
-                                (Direction::Up, g.pos - WIDTH),
+                                Direction::Right,
+                                Direction::Left,
+                                Direction::Down,
+                                Direction::Up,
                             ]
                             .iter()
+                            .map(|d| {
+                                let (col, row) = index2xy(g.pos);
+                                let col: usize = col.try_into().unwrap();
+                                let row: usize = row.try_into().unwrap();
+                                match (d, col) {
+                                    (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
+                                    (Direction::Right, _) => (Direction::Right, g.pos + 1),
+                                    (Direction::Left, 0) => {
+                                        (Direction::Left, row * WIDTH + WIDTH - 1)
+                                    }
+                                    (Direction::Left, _) => (Direction::Left, g.pos - 1),
+                                    (Direction::Down, _) => (Direction::Down, g.pos + WIDTH),
+                                    (Direction::Up, _) => (Direction::Up, g.pos - WIDTH),
+                                }
+                            })
                             //.filter(|(d, _p)| *d != opposite_dir[&g.direction]) // not go back
                             .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                             .map(|(d, p)| {
-                                let (col, row) = index2xy(*p);
-                                (*d, *p, tcol.abs_diff(col) + trow.abs_diff(row))
+                                let (col, row) = index2xy(p);
+                                let (tcol, trow) = index2xy(self.player.pos);
+                                (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
                             })
                             .max_by(|x, y| x.2.cmp(&y.2))
                             .unwrap();
@@ -383,8 +411,10 @@ impl Game {
                         ]
                         .iter()
                         .map(|(d, p)| {
-                            let col = *p % WIDTH;
-                            let row = *p / WIDTH;
+                            let (col, row) = index2xy(*p);
+                            let col: usize = col.try_into().unwrap();
+                            let row: usize = row.try_into().unwrap();
+
                             if col == 0 {
                                 // tunnel
                                 (*d, row * WIDTH + WIDTH - 1)
@@ -440,7 +470,6 @@ impl Game {
     }
 
     fn next_player_pos(&self, d: Direction) -> usize {
-        const WIDTHM1: usize = WIDTH - 1;
         let col = self.player.pos % WIDTH;
         match d {
             Direction::Right => match col {
