@@ -38,6 +38,15 @@ fn level2fruit(level: u32) -> (&'static str, u32) {
     }
 }
 
+fn opposite_direction(dir: Direction) -> Direction {
+    match dir {
+        Direction::Right => Direction::Left,
+        Direction::Left => Direction::Right,
+        Direction::Down => Direction::Up,
+        Direction::Up => Direction::Down,
+    }
+}
+
 static LEVEL1MAP: &str = concat!(
     "############################",
     "#............##............#",
@@ -175,6 +184,31 @@ struct Game {
     am: AM,
 }
 
+fn ghost_moves(pos: usize) -> impl Iterator<Item = (Direction, usize)> {
+    [
+        Direction::Right,
+        Direction::Left,
+        Direction::Down,
+        Direction::Up,
+    ]
+    .iter()
+    .map(move |d| {
+        let (col, row) = index2xy(pos);
+        let col: usize = col.try_into().unwrap();
+        let row: usize = row.try_into().unwrap();
+        match (d, col) {
+            (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
+            (Direction::Right, _) => (Direction::Right, pos + 1),
+            (Direction::Left, 0) => (Direction::Left, row * WIDTH + WIDTH - 1),
+            (Direction::Left, _) => (Direction::Left, pos - 1),
+            (Direction::Down, _) => (Direction::Down, pos + WIDTH),
+            (Direction::Up, _) => (Direction::Up, pos - WIDTH),
+        }
+    })
+    //.filter(move |(d, _p)| *d != opposite_dir(direction)) // not go back
+    //.filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+}
+
 impl Game {
     fn new() -> Self {
         let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
@@ -285,13 +319,6 @@ impl Game {
     }
 
     fn update_ghosts(&mut self, telaps: u32) {
-        let opposite_dir: HashMap<Direction, Direction> = HashMap::from([
-            (Direction::Right, Direction::Left),
-            (Direction::Left, Direction::Right),
-            (Direction::Down, Direction::Up),
-            (Direction::Up, Direction::Down),
-        ]);
-
         self.ghosts.iter_mut().for_each(|g| {
             g.edible_duration = if g.edible_duration < telaps {
                 0
@@ -330,35 +357,16 @@ impl Game {
                         g.pos += WIDTH;
                         g.ghost_state = GhostState::Shuffle;
                     } else {
-                        (g.direction, g.pos, _) = [
-                            Direction::Right,
-                            Direction::Left,
-                            Direction::Down,
-                            Direction::Up,
-                        ]
-                        .iter()
-                        .map(|d| {
-                            let (col, row) = index2xy(g.pos);
-                            let col: usize = col.try_into().unwrap();
-                            let row: usize = row.try_into().unwrap();
-                            match (d, col) {
-                                (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
-                                (Direction::Right, _) => (Direction::Right, g.pos + 1),
-                                (Direction::Left, 0) => (Direction::Left, row * WIDTH + WIDTH - 1),
-                                (Direction::Left, _) => (Direction::Left, g.pos - 1),
-                                (Direction::Down, _) => (Direction::Down, g.pos + WIDTH),
-                                (Direction::Up, _) => (Direction::Up, g.pos - WIDTH),
-                            }
-                        })
-                        .filter(|(d, _p)| *d != opposite_dir[&g.direction]) // not go back
-                        .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
-                        .map(|(d, p)| {
-                            let (col, row) = index2xy(p);
-                            let (tcol, trow) = index2xy(8 * WIDTH + 13);
-                            (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
-                        })
-                        .min_by(|x, y| x.2.cmp(&y.2))
-                        .unwrap();
+                        (g.direction, g.pos, _) = ghost_moves(g.pos)
+                            .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
+                            .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+                            .map(|(d, p)| {
+                                let (col, row) = index2xy(p);
+                                let (tcol, trow) = index2xy(8 * WIDTH + 13);
+                                (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
+                            })
+                            .min_by(|x, y| x.2.cmp(&y.2))
+                            .unwrap();
                     }
                 }
                 GhostState::Outside => {
@@ -367,68 +375,26 @@ impl Game {
                             // random => slowdown
 
                             //flee pacman
-                            let (d, p, _dist) = [
-                                Direction::Right,
-                                Direction::Left,
-                                Direction::Down,
-                                Direction::Up,
-                            ]
-                            .iter()
-                            .map(|d| {
-                                let (col, row) = index2xy(g.pos);
-                                let col: usize = col.try_into().unwrap();
-                                let row: usize = row.try_into().unwrap();
-                                match (d, col) {
-                                    (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
-                                    (Direction::Right, _) => (Direction::Right, g.pos + 1),
-                                    (Direction::Left, 0) => {
-                                        (Direction::Left, row * WIDTH + WIDTH - 1)
-                                    }
-                                    (Direction::Left, _) => (Direction::Left, g.pos - 1),
-                                    (Direction::Down, _) => (Direction::Down, g.pos + WIDTH),
-                                    (Direction::Up, _) => (Direction::Up, g.pos - WIDTH),
-                                }
-                            })
-                            //.filter(|(d, _p)| *d != opposite_dir[&g.direction]) // not go back
-                            .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
-                            .map(|(d, p)| {
-                                let (col, row) = index2xy(p);
-                                let (tcol, trow) = index2xy(self.player.pos);
-                                (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
-                            })
-                            .max_by(|x, y| x.2.cmp(&y.2))
-                            .unwrap();
-                            g.direction = d;
-                            g.pos = p;
+                            (g.direction, g.pos, _) = ghost_moves(g.pos)
+                                //.filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
+                                .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+                                .map(|(d, p)| {
+                                    let (col, row) = index2xy(p);
+                                    let (tcol, trow) = index2xy(self.player.pos);
+                                    (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
+                                })
+                                .max_by(|x, y| x.2.cmp(&y.2))
+                                .unwrap();
                         }
                     } else {
                         // scatter mode - todo chase
                         let mut rng = rand::thread_rng();
 
-                        (g.direction, g.pos) = [
-                            Direction::Right,
-                            Direction::Left,
-                            Direction::Down,
-                            Direction::Up,
-                        ]
-                        .iter()
-                        .map(|d| {
-                            let (col, row) = index2xy(g.pos);
-                            let col: usize = col.try_into().unwrap();
-                            let row: usize = row.try_into().unwrap();
-                            match (d, col) {
-                                (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
-                                (Direction::Right, _) => (Direction::Right, g.pos + 1),
-                                (Direction::Left, 0) => (Direction::Left, row * WIDTH + WIDTH - 1),
-                                (Direction::Left, _) => (Direction::Left, g.pos - 1),
-                                (Direction::Down, _) => (Direction::Down, g.pos + WIDTH),
-                                (Direction::Up, _) => (Direction::Up, g.pos - WIDTH),
-                            }
-                        })
-                        .filter(|(d, _p)| *d != opposite_dir[&g.direction]) // not go back
-                        .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
-                        .choose(&mut rng)
-                        .unwrap();
+                        (g.direction, g.pos) = ghost_moves(g.pos)
+                            .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
+                            .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+                            .choose(&mut rng)
+                            .unwrap();
                     }
                 } // Outside
             } // match ghost_state
