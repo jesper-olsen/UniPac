@@ -490,21 +490,20 @@ impl Game {
     } // update_player
 
     fn initialise_ghosts(&mut self) {
-        const A: [usize; 4] = [
+        self.ghosts = [
             10 * WIDTH + 12,
             10 * WIDTH + 14,
             11 * WIDTH + 12,
             11 * WIDTH + 14,
-        ];
-        self.ghosts = vec![];
-        for p in &A {
-            self.ghosts.push(Ghost {
-                pos: *p,
-                direction: Direction::Left,
-                edible_duration: 0,
-                ghost_state: GhostState::Shuffle,
-            });
-        }
+        ]
+        .iter()
+        .map(|p| Ghost {
+            pos: *p,
+            direction: Direction::Left,
+            edible_duration: 0,
+            ghost_state: GhostState::Shuffle,
+        })
+        .collect();
     }
 } // impl Game
 
