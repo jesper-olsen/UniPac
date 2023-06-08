@@ -81,6 +81,10 @@ fn index2xy(i: usize) -> (u16, u16) {
     )
 }
 
+fn index2xy_usize(i: usize) -> (usize, usize) {
+    (i % WIDTH, i / WIDTH)
+}
+
 static MARQUEE: &str = "--------- Plato --------------------------------- \
     Socrates: Greetings, my dear Plato. What is it that captures your attention so? \
     \
@@ -184,6 +188,51 @@ struct Game {
     am: AM,
 }
 
+#[derive(PartialEq)]
+enum Period {
+    Scatter,
+    Chase,
+}
+
+fn period(level: u32, timecum: u32) -> Period {
+    match level {
+        0 => {
+            if timecum < 7000 {
+                Period::Scatter
+            } else if timecum < 27000 {
+                Period::Chase
+            } else if timecum < 34000 {
+                Period::Scatter
+            } else if timecum < 54000 {
+                Period::Chase
+            } else if timecum < 59000 {
+                Period::Scatter
+            } else if timecum < 79000 {
+                Period::Chase
+            } else if timecum < 84000 {
+                Period::Scatter
+            } else {
+                Period::Chase
+            }
+        }
+        _ => {
+            if timecum < 7000 {
+                Period::Scatter
+            } else if timecum < 27000 {
+                Period::Chase
+            } else if timecum < 34000 {
+                Period::Scatter
+            } else if timecum < 54000 {
+                Period::Chase
+            } else if timecum < 59000 {
+                Period::Scatter
+            } else {
+                Period::Chase
+            }
+        }
+    }
+}
+
 fn ghost_moves(pos: usize) -> impl Iterator<Item = (Direction, usize)> {
     [
         Direction::Right,
@@ -205,8 +254,6 @@ fn ghost_moves(pos: usize) -> impl Iterator<Item = (Direction, usize)> {
             (Direction::Up, _) => (Direction::Up, pos - WIDTH),
         }
     })
-    //.filter(move |(d, _p)| *d != opposite_dir(direction)) // not go back
-    //.filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
 }
 
 impl Game {
@@ -226,7 +273,6 @@ impl Game {
         {
             let snd = StaticSoundData::from_file(s, StaticSoundSettings::default())
                 .expect("Failed to load sound");
-            //manager.play(snd.clone());
             sounds.insert(s.to_string(), snd);
         }
 
@@ -290,15 +336,16 @@ impl Game {
                     self.player.next_ghost_score *= 2;
                     // todo: trace eyes back to home \u{1F440}", // eyes
                     g.ghost_state = GhostState::Dead;
+                    g.edible_duration = 0;
                 }
             })
     }
 
     fn update_fruit(&mut self, telaps: u32) {
         self.timecum += telaps;
-        if self.timecum > 500 {
-            self.timecum = 0;
-        }
+        // if self.timecum > 500 {
+        //     self.timecum = 0;
+        // }
 
         if self.fruit_duration > 0 {
             if self.fruit_duration < telaps {
@@ -319,7 +366,60 @@ impl Game {
     }
 
     fn update_ghosts(&mut self, telaps: u32) {
-        self.ghosts.iter_mut().for_each(|g| {
+        const _SCATTER_TARGET: [usize; 4] = [
+            0 * WIDTH + 2,
+            0 * WIDTH + WIDTH - 3,
+            24 * WIDTH + 0,
+            24 * WIDTH + WIDTH - 1,
+        ];
+        // Calc chase mode target pos for Pinky, Blinky, Inkey & Clyde
+        let mut chase_target: [usize; 4] = [self.player.pos; 4];
+        // Pinky - target pacman pos
+        // Blinky - target 4 squares away from pacman
+        let (pcol, prow) = index2xy_usize(self.player.pos);
+        chase_target[1] = match self.player.moving {
+            Direction::Left => {
+                if pcol >= 4 {
+                    self.player.pos - 4
+                } else {
+                    prow * WIDTH
+                }
+            }
+            Direction::Right => {
+                if pcol < WIDTH - 4 {
+                    self.player.pos + 4
+                } else {
+                    prow * WIDTH + WIDTH - 1
+                }
+            }
+            Direction::Up => {
+                if self.player.pos >= 4 * WIDTH {
+                    self.player.pos - 4 * WIDTH
+                } else {
+                    pcol
+                }
+            }
+            Direction::Down => self.player.pos + 4 * WIDTH,
+        };
+        // Inky - target average of pacman pos and Blinky's target
+        let (pcol, prow) = index2xy_usize(self.player.pos);
+        let (bcol, brow) = index2xy_usize(chase_target[1]);
+        let (tcol, trow) = ((pcol + bcol) / 2, (prow + brow) / 2);
+
+        chase_target[2] = trow * WIDTH + tcol;
+
+        // Clyde - target pacman if less than 8 squares away - otherwise target corner
+        let (bcol, brow) = index2xy_usize(self.ghosts[3].pos);
+        let bcol: i32 = bcol.try_into().unwrap();
+        let brow: i32 = brow.try_into().unwrap();
+        let pcol: i32 = pcol.try_into().unwrap();
+        let prow: i32 = prow.try_into().unwrap();
+        let dist = (bcol - pcol) * (bcol - pcol) + (brow - prow) * (brow - prow);
+        if dist >= 64 {
+            chase_target[3] = 0 * WIDTH + 2;
+        }
+
+        self.ghosts.iter_mut().enumerate().for_each(|(gidx, g)| {
             g.edible_duration = if g.edible_duration < telaps {
                 0
             } else {
@@ -386,15 +486,28 @@ impl Game {
                                 .max_by(|x, y| x.2.cmp(&y.2))
                                 .unwrap();
                         }
-                    } else {
-                        // scatter mode - todo chase
-                        let mut rng = rand::thread_rng();
+                    } else if random::<u8>() % 10 > 3 {
+                        if period(self.level, self.timecum) == Period::Chase {
+                            (g.direction, g.pos, _) = ghost_moves(g.pos)
+                                .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
+                                .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+                                .map(|(d, p)| {
+                                    let (col, row) = index2xy(p);
+                                    let (tcol, trow) = index2xy(chase_target[gidx]);
+                                    (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
+                                })
+                                .min_by(|x, y| x.2.cmp(&y.2))
+                                .unwrap();
+                        } else {
+                            // scatter mode
+                            let mut rng = rand::thread_rng();
 
-                        (g.direction, g.pos) = ghost_moves(g.pos)
-                            .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
-                            .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
-                            .choose(&mut rng)
-                            .unwrap();
+                            (g.direction, g.pos) = ghost_moves(g.pos)
+                                .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
+                                .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+                                .choose(&mut rng)
+                                .unwrap();
+                        }
                     }
                 } // Outside
             } // match ghost_state
@@ -621,20 +734,20 @@ fn another_game() -> bool {
 fn pause() -> bool {
     draw_message("PAUSED", false);
     loop {
-        // if let Ok(Event::Key(KeyEvent {
-        //     code: KeyCode::Char(' '),
-        //     ..
-        // })) = read()
-        // {
-        //     return true;
-        // }
-        match read() {
-            Ok(Event::Key(KeyEvent {
-                code: KeyCode::Char(' '),
-                ..
-            })) => return true,
-            _ => (),
+        if let Ok(Event::Key(KeyEvent {
+            code: KeyCode::Char(' '),
+            ..
+        })) = read()
+        {
+            return true;
         }
+        // match read() {
+        //     Ok(Event::Key(KeyEvent {
+        //         code: KeyCode::Char(' '),
+        //         ..
+        //     })) => return true,
+        //     _ => (),
+        // }
     }
 }
 
@@ -699,6 +812,19 @@ fn render_rhs(game: &Game) {
         style::PrintStyledContent(format!("High  : {}", game.high_score).bold().white()),
         cursor::MoveTo(i, 8.try_into().unwrap()),
         style::PrintStyledContent(format!("Level : {}", game.level + 1).bold().white()),
+        cursor::MoveTo(i, 10.try_into().unwrap()),
+        style::PrintStyledContent(
+            format!(
+                "Period : {}",
+                if period(game.level, game.timecum) == Period::Scatter {
+                    "Scatter"
+                } else {
+                    "Chase  "
+                }
+            )
+            .bold()
+            .white()
+        ),
     )
     .ok();
 
