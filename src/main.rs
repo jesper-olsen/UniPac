@@ -79,7 +79,7 @@ fn tunnel(pos: usize) -> bool {
         || (pos >= 11 * WIDTH + 22 && pos <= 11 * WIDTH + WIDTHM1)
 }
 
-fn slowdown(g: &Ghost, level: u32) -> bool {
+fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
     match level {
         0 => {
             if tunnel(g.pos) {
@@ -222,6 +222,7 @@ struct Game {
     ghosts: Vec<Ghost>,
     pill_duration: u32,
     fruit_duration: u32,
+    n_fruits: u8,
     am: AM,
 }
 
@@ -325,6 +326,7 @@ impl Game {
             lives: 3,
             player: Player::new(),
             fruit_duration: 0,
+            n_fruits: 2,
             am: AM { manager, sounds },
         };
 
@@ -340,6 +342,7 @@ impl Game {
             .count()
             .try_into()
             .unwrap();
+        self.n_fruits = 2;
     }
 
     fn initialise(&mut self) {
@@ -507,7 +510,7 @@ impl Game {
                     }
                 }
                 GhostState::Outside => {
-                    if !slowdown(g, self.level) {
+                    if !slowdown_ghost(g, self.level) {
                         if g.edible_duration > 0 {
                             //flee pacman
                             (g.direction, g.pos, _) = ghost_moves(g.pos)
@@ -1051,7 +1054,12 @@ fn game_loop(game: &mut Game) -> GameState {
 
         match game.dots_left {
             0 => return GameState::SheetComplete,
-            74 | 174 => game.fruit_duration = 1000 * (10 + random::<u32>() % 3),
+            74 | 174 => {
+                if game.n_fruits > 0 {
+                    game.n_fruits -= 1;
+                    game.fruit_duration = 1000 * (10 + random::<u32>() % 3)
+                }
+            }
             _ => (),
         }
     }

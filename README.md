@@ -9,8 +9,8 @@ Has most of the game elements from the original game:
 * When eaten, ghost eyes trace path back to ghost house.
 * Two 'fruit' bonuses on every level.
 
-Pacman is rendered with ascii symbols and the ghosts with unicode emoticons - note that the 
-original ghosts are not part of the unicode standard.
+Pacman is animated with ascii symbols and the ghosts rendered with different ghostly unicode emoticons 
+- note that unicode has symbols for most of the fruit bonuses, but not for the ghosts themselves.
 
 Controls are on the arrow keys.
 ```
