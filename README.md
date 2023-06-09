@@ -4,9 +4,13 @@ Pacman for the terminal. Controls are on the arrow keys.
 
 Has most of the game elements from the original game:
 * Ghosts go through Shuffle and Chase (lightbulb) periods where they respectively ignore and actively target pacman.
+* Ghosts flee pacman when frightened.
 * Ghosts slow down in the tunnel and when freightened.
 * When eaten, ghost eyes trace path back to ghost house.
 * Two 'fruit' bonuses on every level.
+
+Pacman is rendered with ascii symbols and the ghosts with unicode emoticons - note that the 
+original ghosts are not part of the unicode standard.
 
 ```
 % cargo run
