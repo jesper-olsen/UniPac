@@ -1,9 +1,9 @@
 # UniPac: Unicode-powered Pacman Adventure 
 
-Pacman for the terminal. Controls are on the arrow keys.
+Pacman for the terminal. 
 
 Has most of the game elements from the original game:
-* Ghosts go through Shuffle and Chase (lightbulb) periods where they respectively ignore and actively target pacman.
+* Ghosts go through 'shuffle' and 'chase' (lightbulb) periods where they ignore/target pacman.
 * Ghosts flee pacman when frightened.
 * Ghosts slow down in the tunnel and when freightened.
 * When eaten, ghost eyes trace path back to ghost house.
@@ -12,6 +12,7 @@ Has most of the game elements from the original game:
 Pacman is rendered with ascii symbols and the ghosts with unicode emoticons - note that the 
 original ghosts are not part of the unicode standard.
 
+Controls are on the arrow keys.
 ```
 % cargo run
 ```
