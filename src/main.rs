@@ -74,6 +74,43 @@ static LEVEL1MAP: &str = concat!(
     "############################",
 );
 
+fn tunnel(pos: usize) -> bool {
+    (pos >= 11 * WIDTH && pos <= 11 * WIDTH + 5)
+        || (pos >= 11 * WIDTH + 22 && pos <= 11 * WIDTH + WIDTHM1)
+}
+
+fn slowdown(g: &Ghost, level: u32) -> bool {
+    match level {
+        0 => {
+            if tunnel(g.pos) {
+                random::<u8>() % 100 < 60
+            } else if g.edible_duration > 0 {
+                random::<u8>() % 100 < 50
+            } else {
+                random::<u8>() % 100 < 25
+            }
+        }
+        1 | 2 | 3 => {
+            if tunnel(g.pos) {
+                random::<u8>() % 100 < 55
+            } else if g.edible_duration > 0 {
+                random::<u8>() % 100 < 45
+            } else {
+                random::<u8>() % 100 < 15
+            }
+        }
+        _ => {
+            if tunnel(g.pos) {
+                random::<u8>() % 100 < 50
+            } else if g.edible_duration > 0 {
+                random::<u8>() % 100 < 40
+            } else {
+                random::<u8>() % 100 < 5
+            }
+        }
+    }
+}
+
 fn index2xy(i: usize) -> (u16, u16) {
     (
         (i % WIDTH).try_into().unwrap(),
@@ -401,9 +438,9 @@ impl Game {
             }
             Direction::Down => self.player.pos + 4 * WIDTH,
         };
-        // Inky - target average of pacman pos and Blinky's target
+        // Inky - target average of pacman pos and Blinky
         let (pcol, prow) = index2xy_usize(self.player.pos);
-        let (bcol, brow) = index2xy_usize(chase_target[1]);
+        let (bcol, brow) = index2xy_usize(self.ghosts[0].pos);
         let (tcol, trow) = ((pcol + bcol) / 2, (prow + brow) / 2);
 
         chase_target[2] = trow * WIDTH + tcol;
@@ -470,10 +507,8 @@ impl Game {
                     }
                 }
                 GhostState::Outside => {
-                    if g.edible_duration > 0 {
-                        if random::<u8>() % 3 == 0 {
-                            // random => slowdown
-
+                    if !slowdown(g, self.level) {
+                        if g.edible_duration > 0 {
                             //flee pacman
                             (g.direction, g.pos, _) = ghost_moves(g.pos)
                                 //.filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
@@ -485,9 +520,7 @@ impl Game {
                                 })
                                 .max_by(|x, y| x.2.cmp(&y.2))
                                 .unwrap();
-                        }
-                    } else if random::<u8>() % 10 > 3 {
-                        if period(self.level, self.timecum) == Period::Chase {
+                        } else if period(self.level, self.timecum) == Period::Chase {
                             (g.direction, g.pos, _) = ghost_moves(g.pos)
                                 .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
                                 .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
@@ -803,14 +836,13 @@ fn render_rhs(game: &Game) {
     //     }
     // }
 
-    if period(game.level, game.timecum) == Period::Chase {
-        crossterm::queue!(
-            stdout(),
-            cursor::MoveTo(30, 23),
-            style::PrintStyledContent(format!("\u{1F4A1}").bold().white()) // light bulb
-        )
-        .ok();
-    }
+    let s = if period(game.level, game.timecum) == Period::Chase {
+        "\u{1F4A1}" // light bulb
+    } else {
+        "  "
+    };
+
+    crossterm::queue!(stdout(), cursor::MoveTo(30, 23), style::Print(s)).ok();
 
     let i = centered_x("Score : 123456"); /* get a pos base on av score digits */
     crossterm::queue!(
@@ -832,6 +864,7 @@ fn render_rhs(game: &Game) {
     let s2: String = s.into_iter().chain(s1.into_iter()).collect::<String>();
     draw_message_at(24 * WIDTH, &s2);
 
+    // scroll marquee
     // let (cols, rows) = match terminal::size() {
     //     Ok((cols, rows)) => (cols, rows),
     //     Err(_) => (0, 0), // panic!
@@ -848,20 +881,15 @@ fn render_rhs(game: &Game) {
     // let i1: usize = game.mq_idx % MARQUEE.len();
     // let t: usize = q as usize + game.mq_idx;
     // let i2: usize = t % MARQUEE.len();
+    // crossterm::execute!(stdout(), cursor::MoveTo(i, rows - i)).ok();
     // if i1 < i2 {
-    //     crossterm::queue!(
-    //         stdout(),
-    //         cursor::MoveTo(i, rows - 1),
-    //         style::PrintStyledContent(MARQUEE[i1..i2].white())
-    //     )
-    //     .ok();
+    //     crossterm::execute!(stdout(), style::PrintStyledContent(MARQUEE[i1..i2].white())).ok();
     // } else {
-    //     crossterm::queue!(
+    //     crossterm::execute!(
     //         stdout(),
-    //         cursor::MoveTo(i, rows - 1),
     //         style::PrintStyledContent(
     //             format!("{}{}", &MARQUEE[i1..MARQUEE.len() - 1], &MARQUEE[0..i2]).white()
-    //         ),
+    //         )
     //     )
     //     .ok();
     // }
@@ -964,7 +992,14 @@ fn draw_dynamic(game: &Game) {
 fn game_loop(game: &mut Game) -> GameState {
     loop {
         let start = Instant::now();
-        thread::sleep(time::Duration::from_millis(100));
+
+        // adjust overall speed by level
+        let delta = match game.level {
+            0 => 110,
+            1 | 2 | 3 => 100,
+            _ => 90,
+        };
+        thread::sleep(time::Duration::from_millis(delta));
 
         if let Ok(true) = poll(time::Duration::from_millis(10)) {
             game.player.last_input_direction = match read() {
