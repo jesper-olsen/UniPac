@@ -132,7 +132,7 @@ enum GameState {
 
 #[derive(PartialEq)]
 enum GhostState {
-    Shuffle,
+    Home,
     Gateway,
     Outside,
     Dead,
@@ -426,7 +426,7 @@ impl Game {
                 g.edible_duration - telaps
             };
             match g.ghost_state {
-                GhostState::Shuffle => {
+                GhostState::Home => {
                     let a: [usize; 4] = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
                     let idx = a[random::<usize>() % a.len()];
                     match self.board[idx] {
@@ -455,7 +455,7 @@ impl Game {
                         g.direction = Direction::Down;
                     } else if g.pos == 9 * WIDTH + 13 || g.pos == 9 * WIDTH + 14 {
                         g.pos += WIDTH;
-                        g.ghost_state = GhostState::Shuffle;
+                        g.ghost_state = GhostState::Home;
                     } else {
                         (g.direction, g.pos, _) = ghost_moves(g.pos)
                             .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
@@ -614,7 +614,7 @@ impl Game {
             pos: *p,
             direction: Direction::Left,
             edible_duration: 0,
-            ghost_state: GhostState::Shuffle,
+            ghost_state: GhostState::Home,
         })
         .collect();
     }
@@ -803,28 +803,24 @@ fn render_rhs(game: &Game) {
     //     }
     // }
 
+    if period(game.level, game.timecum) == Period::Chase {
+        crossterm::queue!(
+            stdout(),
+            cursor::MoveTo(30, 23),
+            style::PrintStyledContent(format!("\u{1F4A1}").bold().white()) // light bulb
+        )
+        .ok();
+    }
+
     let i = centered_x("Score : 123456"); /* get a pos base on av score digits */
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(i, 5.try_into().unwrap()),
-        style::PrintStyledContent(format!("Score : {}", game.player.score).bold().white()),
+        style::PrintStyledContent(format!("Score  : {}", game.player.score).bold().white()),
         cursor::MoveTo(i, 6.try_into().unwrap()),
-        style::PrintStyledContent(format!("High  : {}", game.high_score).bold().white()),
+        style::PrintStyledContent(format!("High   : {}", game.high_score).bold().white()),
         cursor::MoveTo(i, 8.try_into().unwrap()),
-        style::PrintStyledContent(format!("Level : {}", game.level + 1).bold().white()),
-        cursor::MoveTo(i, 10.try_into().unwrap()),
-        style::PrintStyledContent(
-            format!(
-                "Period : {}",
-                if period(game.level, game.timecum) == Period::Scatter {
-                    "Scatter"
-                } else {
-                    "Chase  "
-                }
-            )
-            .bold()
-            .white()
-        ),
+        style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
     )
     .ok();
 
