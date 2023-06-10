@@ -85,7 +85,7 @@ fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
             if tunnel(g.pos) {
                 random::<u8>() % 100 < 60
             } else if g.edible_duration > 0 {
-                random::<u8>() % 100 < 50
+                random::<u8>() % 100 < 60
             } else {
                 random::<u8>() % 100 < 25
             }
@@ -94,7 +94,7 @@ fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
             if tunnel(g.pos) {
                 random::<u8>() % 100 < 55
             } else if g.edible_duration > 0 {
-                random::<u8>() % 100 < 45
+                random::<u8>() % 100 < 50
             } else {
                 random::<u8>() % 100 < 15
             }
@@ -103,7 +103,7 @@ fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
             if tunnel(g.pos) {
                 random::<u8>() % 100 < 50
             } else if g.edible_duration > 0 {
-                random::<u8>() % 100 < 40
+                random::<u8>() % 100 < 45
             } else {
                 random::<u8>() % 100 < 5
             }
@@ -222,7 +222,6 @@ struct Game {
     ghosts: Vec<Ghost>,
     pill_duration: u32,
     fruit_duration: u32,
-    n_fruits_spawned: u8,
     am: AM,
 }
 
@@ -326,7 +325,6 @@ impl Game {
             lives: 3,
             player: Player::new(),
             fruit_duration: 0,
-            n_fruits_spawned: 0,
             am: AM { manager, sounds },
         };
 
@@ -342,7 +340,7 @@ impl Game {
             .count()
             .try_into()
             .unwrap();
-        self.n_fruits_spawned = 0;
+        self.dots_left += 2; // +2 pseudo dots for fruit bonuses
     }
 
     fn initialise(&mut self) {
@@ -997,11 +995,15 @@ fn game_loop(game: &mut Game) -> GameState {
         let start = Instant::now();
 
         // adjust overall speed by level
-        let delta = match game.level {
+        let mut delta = match game.level {
             0 => 110,
             1 | 2 | 3 => 100,
             _ => 90,
         };
+        // faster if power pill eaten
+        if game.ghosts.iter().filter(|g| g.edible_duration > 0).count() > 0 {
+            delta -= 10;
+        }
         thread::sleep(time::Duration::from_millis(delta));
 
         if let Ok(true) = poll(time::Duration::from_millis(10)) {
@@ -1050,14 +1052,15 @@ fn game_loop(game: &mut Game) -> GameState {
 
         if game.player.dead {
             return GameState::LifeLost;
-        } else if game.dots_left == 0 {
-            return GameState::SheetComplete;
-        } else if game.dots_left == 174 && game.n_fruits_spawned == 0 {
-            game.n_fruits_spawned = 1;
-            game.fruit_duration = 1000 * (10 + random::<u32>() % 3);
-        } else if game.dots_left == 74 && game.n_fruits_spawned == 1 {
-            game.n_fruits_spawned = 2;
-            game.fruit_duration = 1000 * (10 + random::<u32>() % 3);
+        }
+
+        match game.dots_left {
+            0 => return GameState::SheetComplete,
+            74 | 174 => {
+                game.fruit_duration = 1000 * (10 + random::<u32>() % 3);
+                game.dots_left -= 1;
+            }
+            _ => (),
         }
     }
 }
