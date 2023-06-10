@@ -6,11 +6,11 @@ Has most of the game elements from the original game:
 * Ghosts go through 'shuffle' and 'chase' (lightbulb) periods where they ignore/target pacman.
 * Ghosts flee pacman when frightened.
 * Ghosts slow down in the tunnel and when freightened.
-* When eaten, ghost eyes trace a path back to ghost house.
+* When eaten, ghost eyes trace a path back to the ghost house.
 * Two 'fruit' bonuses on every level.
 
-Pacman is animated with ascii symbols and the ghosts rendered with different ghostly unicode emoticons 
-- note that unicode has symbols for most of the fruit bonuses, but not for the ghosts themselves.
+Pacman is animated with ascii symbols and the ghosts rendered with different ghostly unicode emoticons; 
+ Unicode has symbols for most of the fruit bonuses, but not for the ghosts themselves.
 
 Controls are on the arrow keys.
 ```

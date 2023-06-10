@@ -410,38 +410,29 @@ impl Game {
             24 * WIDTH + 0,
             24 * WIDTH + WIDTH - 1,
         ];
-        // Calc chase mode target pos for Pinky, Blinky, Inkey & Clyde
+        // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
         let mut chase_target: [usize; 4] = [self.player.pos; 4];
         // Pinky - target pacman pos
         // Blinky - target 4 squares away from pacman
         let (pcol, prow) = index2xy_usize(self.player.pos);
         chase_target[1] = match self.player.moving {
             Direction::Left => {
-                if pcol >= 4 {
-                    self.player.pos - 4
-                } else {
-                    prow * WIDTH
-                }
+                let c: i32 = std::cmp::max(0, pcol as i32 - 4);
+                prow * WIDTH + c as usize
             }
             Direction::Right => {
-                if pcol < WIDTH - 4 {
-                    self.player.pos + 4
-                } else {
-                    prow * WIDTH + WIDTH - 1
-                }
+                let c: i32 = std::cmp::min((pcol + 4) as i32, WIDTHM1 as i32);
+                prow * WIDTH + c as usize
             }
             Direction::Up => {
-                if self.player.pos >= 4 * WIDTH {
-                    self.player.pos - 4 * WIDTH
-                } else {
-                    pcol
-                }
+                let r: i32 = std::cmp::max(0, prow as i32 - 4);
+                r as usize * WIDTH + pcol
             }
             Direction::Down => self.player.pos + 4 * WIDTH,
         };
         // Inky - target average of pacman pos and Blinky
         let (pcol, prow) = index2xy_usize(self.player.pos);
-        let (bcol, brow) = index2xy_usize(self.ghosts[0].pos);
+        let (bcol, brow) = index2xy_usize(self.ghosts[1].pos);
         let (tcol, trow) = ((pcol + bcol) / 2, (prow + brow) / 2);
 
         chase_target[2] = trow * WIDTH + tcol;
