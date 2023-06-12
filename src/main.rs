@@ -987,13 +987,13 @@ fn game_loop(game: &mut Game) -> GameState {
 
         // adjust overall speed by level
         let mut delta = match game.level {
-            0 => 110,
-            1 | 2 | 3 => 100,
-            _ => 90,
+            0 => 140,
+            1 | 2 | 3 => 130,
+            _ => 120,
         };
         // faster if power pill eaten
         if game.ghosts.iter().filter(|g| g.edible_duration > 0).count() > 0 {
-            delta -= 10;
+            delta -= 20;
         }
         thread::sleep(time::Duration::from_millis(delta));
 

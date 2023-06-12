@@ -8,9 +8,10 @@ Has most of the game elements from the original game:
 * Ghosts slow down in the tunnel and when freightened.
 * When eaten, ghost eyes trace a path back to the ghost house.
 * Two 'fruit' bonuses on every level.
+* Cornering.
 
-Pacman is animated with ascii symbols and the ghosts rendered with different ghostly unicode emoticons; 
- Unicode has symbols for most of the fruit bonuses, but not for the ghosts themselves.
+Pacman is animated with ascii symbols and the ghosts rendered with different ghostly unicode emoticons (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
+ Unicode has symbols for most of the fruit bonuses (🍒,🍓,🍑,🍎,🍇,🚀,🔔,🔑), but not for the ghosts themselves.
 
 Controls are on the arrow keys.
 ```
