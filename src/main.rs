@@ -25,6 +25,10 @@ const MAX_PACMAN_LIVES: u32 = 6;
 const WIDTH: usize = 28;
 const WIDTHM1: usize = WIDTH - 1;
 
+fn pct(n: u8) -> bool {
+    random::<u8>() % 100 < n
+}
+
 fn level2fruit(level: u32) -> (&'static str, u32) {
     match level {
         0 => ("\u{1F352}", 100),        // cherries
@@ -81,33 +85,15 @@ fn tunnel(pos: usize) -> bool {
 
 fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
     match level {
-        0 => {
-            if tunnel(g.pos) {
-                random::<u8>() % 100 < 60
-            } else if g.edible_duration > 0 {
-                random::<u8>() % 100 < 60
-            } else {
-                random::<u8>() % 100 < 25
-            }
-        }
-        1 | 2 | 3 => {
-            if tunnel(g.pos) {
-                random::<u8>() % 100 < 55
-            } else if g.edible_duration > 0 {
-                random::<u8>() % 100 < 50
-            } else {
-                random::<u8>() % 100 < 15
-            }
-        }
-        _ => {
-            if tunnel(g.pos) {
-                random::<u8>() % 100 < 50
-            } else if g.edible_duration > 0 {
-                random::<u8>() % 100 < 45
-            } else {
-                random::<u8>() % 100 < 5
-            }
-        }
+        0 if tunnel(g.pos) => pct(60),
+        0 if g.edible_duration > 0 => pct(60),
+        0 => pct(25),
+        1 | 2 | 3 if tunnel(g.pos) => pct(55),
+        1 | 2 | 3 if g.edible_duration > 0 => pct(50),
+        1 | 2 | 3 => pct(15),
+        _ if tunnel(g.pos) => pct(50),
+        _ if g.edible_duration > 0 => pct(45),
+        _ => pct(5),
     }
 }
 
@@ -233,40 +219,20 @@ enum Period {
 
 fn period(level: u32, timecum: u32) -> Period {
     match level {
-        0 => {
-            if timecum < 7000 {
-                Period::Scatter
-            } else if timecum < 27000 {
-                Period::Chase
-            } else if timecum < 34000 {
-                Period::Scatter
-            } else if timecum < 54000 {
-                Period::Chase
-            } else if timecum < 59000 {
-                Period::Scatter
-            } else if timecum < 79000 {
-                Period::Chase
-            } else if timecum < 84000 {
-                Period::Scatter
-            } else {
-                Period::Chase
-            }
-        }
-        _ => {
-            if timecum < 7000 {
-                Period::Scatter
-            } else if timecum < 27000 {
-                Period::Chase
-            } else if timecum < 34000 {
-                Period::Scatter
-            } else if timecum < 54000 {
-                Period::Chase
-            } else if timecum < 59000 {
-                Period::Scatter
-            } else {
-                Period::Chase
-            }
-        }
+        0 if timecum < 7000 => Period::Scatter,
+        0 if timecum < 27000 => Period::Chase,
+        0 if timecum < 34000 => Period::Scatter,
+        0 if timecum < 54000 => Period::Chase,
+        0 if timecum < 59000 => Period::Scatter,
+        0 if timecum < 79000 => Period::Chase,
+        0 if timecum < 84000 => Period::Scatter,
+        0 => Period::Chase,
+        _ if timecum < 7000 => Period::Scatter,
+        _ if timecum < 27000 => Period::Chase,
+        _ if timecum < 34000 => Period::Scatter,
+        _ if timecum < 54000 => Period::Chase,
+        _ if timecum < 59000 => Period::Scatter,
+        _ => Period::Chase,
     }
 }
 
@@ -836,7 +802,7 @@ fn render_rhs(game: &Game) {
 
     crossterm::queue!(stdout(), cursor::MoveTo(30, 23), style::Print(s)).ok();
 
-    let i = centered_x("Score : 123456"); /* get a pos base on av score digits */
+    let i = centered_x("Score : 123456"); // get a pos base on av score digits 
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(i, 5.try_into().unwrap()),
