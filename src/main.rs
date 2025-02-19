@@ -790,34 +790,38 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     draw_message_at(24 * WIDTH, &s2)?;
 
     // scroll marquee
-    // let (cols, rows) = match terminal::size() {
-    //     Ok((cols, rows)) => (cols, rows),
-    //     Err(_) => (0, 0), // panic!
-    // };
+    let (cols, rows) = match terminal::size() {
+        Ok((cols, rows)) => (cols, rows),
+        Err(_) => (0, 0), // panic!
+    };
 
-    // let i: u16 = if cols > WIDTH.try_into().unwrap() {
-    //     0
-    // } else {
-    //     WIDTH.try_into().unwrap()
-    // };
+    // rediculous - but here we go
+    let i: u16 = if let Ok(width) = WIDTH.try_into() {
+        if cols > width {
+            0
+        } else {
+            width
+        }
+    } else {
+        u16::MAX
+    };
 
-    // let q: u16 = cols - i;
+    let q: u16 = cols - i;
 
-    // let i1: usize = game.mq_idx % MARQUEE.len();
-    // let t: usize = q as usize + game.mq_idx;
-    // let i2: usize = t % MARQUEE.len();
-    // crossterm::execute!(stdout(), cursor::MoveTo(i, rows - i)).ok();
-    // if i1 < i2 {
-    //     crossterm::execute!(stdout(), style::PrintStyledContent(MARQUEE[i1..i2].white())).ok();
-    // } else {
-    //     crossterm::execute!(
-    //         stdout(),
-    //         style::PrintStyledContent(
-    //             format!("{}{}", &MARQUEE[i1..MARQUEE.len() - 1], &MARQUEE[0..i2]).white()
-    //         )
-    //     )
-    //     .ok();
-    // }
+    let i1: usize = game.mq_idx % MARQUEE.len();
+    let t: usize = q as usize + game.mq_idx;
+    let i2: usize = t % MARQUEE.len();
+    crossterm::execute!(stdout(), cursor::MoveTo(i, rows - i))?;
+    if i1 < i2 {
+        crossterm::execute!(stdout(), style::PrintStyledContent(MARQUEE[i1..i2].white()))?;
+    } else {
+        crossterm::execute!(
+            stdout(),
+            style::PrintStyledContent(
+                format!("{}{}", &MARQUEE[i1..MARQUEE.len() - 1], &MARQUEE[0..i2]).white()
+            )
+        )?
+    }
     Ok(())
 }
 
@@ -1042,6 +1046,5 @@ fn main() -> io::Result<()> {
         draw_end_game()?;
         another_game()?
     } {}
-    close_render()?;
-    Ok(())
+    close_render()
 }

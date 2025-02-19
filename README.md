@@ -10,7 +10,7 @@ Has most of the game elements from the original game:
 * Two 'fruit' bonuses on every level.
 * Cornering.
 
-Pacman is animated with ascii symbols and the ghosts rendered with different ghostly unicode emoticons (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
+Pacman is animated with ascii symbols and the ghosts with unicode codepoints (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
  Unicode has symbols for most of the fruit bonuses (🍒,🍓,🍑,🍎,🍇,🚀,🔔,🔑), but not for the ghosts themselves.
 
 Controls are on the arrow keys.
