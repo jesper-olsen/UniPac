@@ -24,6 +24,12 @@ use kira::{
 const MAX_PACMAN_LIVES: u32 = 6;
 const WIDTH: usize = 28;
 const WIDTHM1: usize = WIDTH - 1;
+const GHOSTS_INIT: [Ghost; 4] = [
+    Ghost::new(10 * WIDTH + 12),
+    Ghost::new(10 * WIDTH + 14),
+    Ghost::new(11 * WIDTH + 12),
+    Ghost::new(11 * WIDTH + 14),
+];
 
 fn pct(n: u8) -> bool {
     random::<u8>() % 100 < n
@@ -79,8 +85,8 @@ static LEVEL1MAP: &str = concat!(
 );
 
 fn tunnel(pos: usize) -> bool {
-    (pos >= 11 * WIDTH && pos <= 11 * WIDTH + 5)
-        || (pos >= 11 * WIDTH + 22 && pos <= 11 * WIDTH + WIDTHM1)
+    (11 * WIDTH..=11 * WIDTH + 5).contains(&pos)
+        || (11 * WIDTH + 22..=11 * WIDTH + WIDTHM1).contains(&pos)
 }
 
 fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
@@ -88,9 +94,9 @@ fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
         0 if tunnel(g.pos) => pct(60),
         0 if g.edible_duration > 0 => pct(60),
         0 => pct(25),
-        1 | 2 | 3 if tunnel(g.pos) => pct(55),
-        1 | 2 | 3 if g.edible_duration > 0 => pct(50),
-        1 | 2 | 3 => pct(15),
+        1..=3 if tunnel(g.pos) => pct(55),
+        1..=3 if g.edible_duration > 0 => pct(50),
+        1..=3 => pct(15),
         _ if tunnel(g.pos) => pct(50),
         _ if g.edible_duration > 0 => pct(45),
         _ => pct(5),
@@ -106,6 +112,10 @@ fn index2xy(i: usize) -> (u16, u16) {
 
 fn index2xy_usize(i: usize) -> (usize, usize) {
     (i % WIDTH, i / WIDTH)
+}
+
+const fn xy2index(col: usize, row: usize) -> usize {
+    row * WIDTH + col
 }
 
 static MARQUEE: &str = "--------- Plato --------------------------------- \
@@ -168,7 +178,16 @@ struct Ghost {
     direction: Direction,
 }
 
-impl Ghost {}
+impl Ghost {
+    const fn new(pos: usize) -> Self {
+        Ghost {
+            pos,
+            direction: Direction::Left,
+            edible_duration: 0,
+            ghost_state: GhostState::Home,
+        }
+    }
+}
 
 struct Player {
     pos: usize,
@@ -205,7 +224,7 @@ struct Game {
     lives: u32,
     player: Player,
     level: u32,
-    ghosts: Vec<Ghost>,
+    ghosts: [Ghost; 4],
     pill_duration: u32,
     fruit_duration: u32,
     am: AM,
@@ -218,20 +237,14 @@ enum Period {
 }
 
 fn period(level: u32, timecum: u32) -> Period {
-    match level {
-        0 if timecum < 7000 => Period::Scatter,
-        0 if timecum < 27000 => Period::Chase,
-        0 if timecum < 34000 => Period::Scatter,
-        0 if timecum < 54000 => Period::Chase,
-        0 if timecum < 59000 => Period::Scatter,
-        0 if timecum < 79000 => Period::Chase,
-        0 if timecum < 84000 => Period::Scatter,
-        0 => Period::Chase,
-        _ if timecum < 7000 => Period::Scatter,
-        _ if timecum < 27000 => Period::Chase,
-        _ if timecum < 34000 => Period::Scatter,
-        _ if timecum < 54000 => Period::Chase,
-        _ if timecum < 59000 => Period::Scatter,
+    match timecum {
+        0..=6999 => Period::Scatter,
+        7000..=26999 => Period::Chase,
+        27000..=33999 => Period::Scatter,
+        34000..=53999 => Period::Chase,
+        54000..=58999 => Period::Scatter,
+        59000..=78999 if level == 0 => Period::Chase,
+        79000..=83999 if level == 0 => Period::Scatter,
         _ => Period::Chase,
     }
 }
@@ -245,9 +258,7 @@ fn ghost_moves(pos: usize) -> impl Iterator<Item = (Direction, usize)> {
     ]
     .iter()
     .map(move |d| {
-        let (col, row) = index2xy(pos);
-        let col: usize = col.try_into().unwrap();
-        let row: usize = row.try_into().unwrap();
+        let (col, row) = index2xy_usize(pos);
         match (d, col) {
             (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
             (Direction::Right, _) => (Direction::Right, pos + 1),
@@ -282,10 +293,10 @@ impl Game {
         let mut game = Game {
             timecum: 0,
             mq_idx: 0,
-            ghosts: vec![],
+            ghosts: GHOSTS_INIT,
             pill_duration: 6000,
             level: 0,
-            board: LEVEL1MAP.to_string().chars().collect(),
+            board: LEVEL1MAP.chars().collect(),
             dots_left: 0,
             high_score: 9710,
             lives: 3,
@@ -298,7 +309,7 @@ impl Game {
         game
     }
     fn repopulate_board(&mut self) {
-        self.board = LEVEL1MAP.to_string().chars().collect();
+        self.board = LEVEL1MAP.chars().collect();
         self.dots_left = self
             .board
             .iter()
@@ -311,7 +322,7 @@ impl Game {
 
     fn initialise(&mut self) {
         self.repopulate_board();
-        self.initialise_ghosts();
+        self.ghosts = GHOSTS_INIT;
     }
 
     fn ghosts_are_edible(&mut self, duration: u32) {
@@ -370,12 +381,12 @@ impl Game {
     }
 
     fn update_ghosts(&mut self, telaps: u32) {
-        const _SCATTER_TARGET: [usize; 4] = [
-            0 * WIDTH + 2,
-            0 * WIDTH + WIDTH - 3,
-            24 * WIDTH + 0,
-            24 * WIDTH + WIDTH - 1,
-        ];
+        // const _SCATTER_TARGET: [usize; 4] = [
+        //     0 * WIDTH + 2,
+        //     0 * WIDTH + WIDTH - 3,
+        //     24 * WIDTH + 0,
+        //     24 * WIDTH + WIDTH - 1,
+        // ];
         // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
         let mut chase_target: [usize; 4] = [self.player.pos; 4];
         // Pinky - target pacman pos
@@ -411,7 +422,7 @@ impl Game {
         let prow: i32 = prow.try_into().unwrap();
         let dist = (bcol - pcol) * (bcol - pcol) + (brow - prow) * (brow - prow);
         if dist >= 64 {
-            chase_target[3] = 0 * WIDTH + 2;
+            chase_target[3] = xy2index(0, 2)
         }
 
         self.ghosts.iter_mut().enumerate().for_each(|(gidx, g)| {
@@ -592,23 +603,6 @@ impl Game {
             self.high_score = self.player.score;
         }
     } // update_player
-
-    fn initialise_ghosts(&mut self) {
-        self.ghosts = [
-            10 * WIDTH + 12,
-            10 * WIDTH + 14,
-            11 * WIDTH + 12,
-            11 * WIDTH + 14,
-        ]
-        .iter()
-        .map(|p| Ghost {
-            pos: *p,
-            direction: Direction::Left,
-            edible_duration: 0,
-            ghost_state: GhostState::Home,
-        })
-        .collect();
-    }
 } // impl Game
 
 fn init_render() {
@@ -802,7 +796,7 @@ fn render_rhs(game: &Game) {
 
     crossterm::queue!(stdout(), cursor::MoveTo(30, 23), style::Print(s)).ok();
 
-    let i = centered_x("Score : 123456"); // get a pos base on av score digits 
+    let i = centered_x("Score : 123456"); // get a pos base on av score digits
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(i, 5.try_into().unwrap()),
@@ -819,7 +813,7 @@ fn render_rhs(game: &Game) {
 
     let s = vec!['\u{1F642}'; game.lives as usize];
     let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
-    let s2: String = s.into_iter().chain(s1.into_iter()).collect::<String>();
+    let s2: String = s.into_iter().chain(s1).collect::<String>();
     draw_message_at(24 * WIDTH, &s2);
 
     // scroll marquee
@@ -954,7 +948,7 @@ fn game_loop(game: &mut Game) -> GameState {
         // adjust overall speed by level
         let mut delta = match game.level {
             0 => 140,
-            1 | 2 | 3 => 130,
+            1..=3 => 130,
             _ => 120,
         };
         // faster if power pill eaten
@@ -1049,7 +1043,7 @@ fn main_game() {
                 flash_board(&game);
                 game.level += 1;
                 game.repopulate_board();
-                game.initialise_ghosts();
+                game.ghosts = GHOSTS_INIT;
                 game.reinitialise_player();
                 game.timecum = 0;
             }
@@ -1062,7 +1056,7 @@ fn main_game() {
                 }
                 game.lives -= 1;
                 thread::sleep(time::Duration::from_millis(100));
-                game.initialise_ghosts();
+                game.ghosts = GHOSTS_INIT;
                 game.reinitialise_player();
             }
         };
