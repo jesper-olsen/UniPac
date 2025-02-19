@@ -192,28 +192,20 @@ impl Ghost {
 struct Player {
     pos: usize,
     dead: bool,
-    score: u32,
     last_input_direction: Direction,
     moving: Direction,
     anim_frame: usize,
-    next_ghost_score: u32,
     timecum: u32,
 }
 
-impl Player {
-    pub fn new() -> Self {
-        Player {
-            dead: false,
-            pos: 18 * WIDTH + 14,
-            last_input_direction: Direction::Left,
-            moving: Direction::Left,
-            timecum: 0,
-            anim_frame: 0,
-            score: 0,
-            next_ghost_score: 0,
-        }
-    }
-}
+const PLAYER_INIT: Player = Player {
+    pos: 18 * WIDTH + 14,
+    dead: false,
+    last_input_direction: Direction::Left,
+    moving: Direction::Left,
+    anim_frame: 0,
+    timecum: 0,
+};
 
 struct Game {
     board: Vec<char>,
@@ -227,6 +219,8 @@ struct Game {
     ghosts: [Ghost; 4],
     pill_duration: u32,
     fruit_duration: u32,
+    next_ghost_score: u32,
+    score: u32,
     am: AM,
 }
 
@@ -300,8 +294,10 @@ impl Game {
             dots_left: 0,
             high_score: 9710,
             lives: 3,
-            player: Player::new(),
+            player: PLAYER_INIT,
             fruit_duration: 0,
+            next_ghost_score: 0,
+            score: 0,
             am: AM { manager, sounds },
         };
 
@@ -343,13 +339,12 @@ impl Game {
                     self.player.dead = true;
                 } else {
                     self.am.play("Audio/eatghost.ogg".to_string());
-                    self.player.score += self.player.next_ghost_score;
+                    self.score += self.next_ghost_score;
 
-                    draw_message_at(g.pos, format!("{}", self.player.next_ghost_score).as_str());
+                    draw_message_at(g.pos, &format!("{}", self.next_ghost_score));
                     thread::sleep(time::Duration::from_millis(150));
 
-                    self.player.next_ghost_score *= 2;
-                    // todo: trace eyes back to home \u{1F440}", // eyes
+                    self.next_ghost_score *= 2;
                     g.ghost_state = GhostState::Dead;
                     g.edible_duration = 0;
                 }
@@ -369,15 +364,6 @@ impl Game {
                 self.fruit_duration -= telaps;
             }
         }
-    }
-
-    fn reinitialise_player(&mut self) {
-        self.player.dead = false;
-        self.player.pos = 18 * WIDTH + 14;
-        self.player.last_input_direction = Direction::Left;
-        self.player.moving = Direction::Left;
-        self.player.timecum = 0;
-        self.player.anim_frame = 0;
     }
 
     fn update_ghosts(&mut self, telaps: u32) {
@@ -547,7 +533,7 @@ impl Game {
             self.player.anim_frame = (self.player.anim_frame + 1) % 6;
         }
 
-        let prev_score = self.player.score;
+        let prev_score = self.score;
 
         let mut idx = self.next_player_pos(self.player.last_input_direction);
 
@@ -566,7 +552,7 @@ impl Game {
                 self.player.pos = idx;
                 match ch {
                     '.' => {
-                        self.player.score += 10;
+                        self.score += 10;
                         self.dots_left -= 1;
                         self.board[idx] = ' ';
                     }
@@ -574,14 +560,14 @@ impl Game {
                         self.am.play("Audio/eatpill.ogg".to_string());
                         self.board[idx] = ' ';
                         self.ghosts_are_edible(self.pill_duration);
-                        self.player.score += 50;
-                        self.player.next_ghost_score = 200;
+                        self.score += 50;
+                        self.next_ghost_score = 200;
                     }
                     '$' => {
                         if self.fruit_duration > 0 {
                             self.am.play("Audio/eatpill.ogg".to_string());
                             let (_ch, bonus) = level2fruit(self.level);
-                            self.player.score += bonus;
+                            self.score += bonus;
                             self.fruit_duration = 0;
 
                             draw_message(format!("{}", bonus).as_str(), false);
@@ -594,13 +580,13 @@ impl Game {
             _ => (),
         }
 
-        if prev_score < 10000 && self.player.score >= 10000 && self.lives < MAX_PACMAN_LIVES {
+        if prev_score < 10000 && self.score >= 10000 && self.lives < MAX_PACMAN_LIVES {
             self.lives += 1;
             self.am.play("Audio/extra lives.ogg".to_string());
         }
 
-        if self.player.score > self.high_score {
-            self.high_score = self.player.score;
+        if self.score > self.high_score {
+            self.high_score = self.score;
         }
     } // update_player
 } // impl Game
@@ -800,7 +786,7 @@ fn render_rhs(game: &Game) {
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(i, 5.try_into().unwrap()),
-        style::PrintStyledContent(format!("Score  : {}", game.player.score).bold().white()),
+        style::PrintStyledContent(format!("Score  : {}", game.score).bold().white()),
         cursor::MoveTo(i, 6.try_into().unwrap()),
         style::PrintStyledContent(format!("High   : {}", game.high_score).bold().white()),
         cursor::MoveTo(i, 8.try_into().unwrap()),
@@ -1044,7 +1030,7 @@ fn main_game() {
                 game.level += 1;
                 game.repopulate_board();
                 game.ghosts = GHOSTS_INIT;
-                game.reinitialise_player();
+                game.player = PLAYER_INIT;
                 game.timecum = 0;
             }
             GameState::LifeLost => {
@@ -1057,7 +1043,7 @@ fn main_game() {
                 game.lives -= 1;
                 thread::sleep(time::Duration::from_millis(100));
                 game.ghosts = GHOSTS_INIT;
-                game.reinitialise_player();
+                game.player = PLAYER_INIT;
             }
         };
     }
