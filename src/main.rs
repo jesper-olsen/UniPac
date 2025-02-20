@@ -5,9 +5,8 @@ use crossterm::{
     terminal, //QueueableCommand, Result,
 };
 
-// TODO - speed function of level
-
 use rand::random;
+use rand::rngs::ThreadRng;
 use rand::seq::IteratorRandom;
 use std::collections::HashMap;
 use std::io::{self, stdout, Write};
@@ -222,6 +221,7 @@ struct Game {
     next_ghost_score: u32,
     score: u32,
     am: AM,
+    rng: ThreadRng,
 }
 
 #[derive(PartialEq)]
@@ -243,7 +243,7 @@ fn period(level: u32, timecum: u128) -> Period {
     }
 }
 
-fn ghost_moves(pos: usize) -> impl Iterator<Item = (Direction, usize)> {
+fn ghost_moves(pos: usize, board: &[char]) -> impl Iterator<Item = (Direction, usize)> + use<'_> {
     [
         Direction::Right,
         Direction::Left,
@@ -262,6 +262,7 @@ fn ghost_moves(pos: usize) -> impl Iterator<Item = (Direction, usize)> {
             (Direction::Up, _) => (Direction::Up, pos - WIDTH),
         }
     })
+    .filter(|(_d, p)| matches!(board[*p], 'P' | ' ' | '.' | '$'))
 }
 
 impl Game {
@@ -299,6 +300,7 @@ impl Game {
             next_ghost_score: 0,
             score: 0,
             am: AM { manager, sounds },
+            rng: rand::thread_rng(),
         };
 
         game.initialise();
@@ -450,9 +452,8 @@ impl Game {
                         g.pos += WIDTH;
                         g.ghost_state = GhostState::Home;
                     } else {
-                        (g.direction, g.pos, _) = ghost_moves(g.pos)
+                        (g.direction, g.pos, _) = ghost_moves(g.pos, &self.board)
                             .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
-                            .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                             .map(|(d, p)| {
                                 let (col, row) = index2xy(p);
                                 let (tcol, trow) = index2xy(8 * WIDTH + 13);
@@ -466,8 +467,7 @@ impl Game {
                     if !slowdown_ghost(g, self.level) {
                         if g.edible_duration > 0 {
                             //flee pacman
-                            (g.direction, g.pos, _) = ghost_moves(g.pos)
-                                .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
+                            (g.direction, g.pos, _) = ghost_moves(g.pos, &self.board)
                                 .map(|(d, p)| {
                                     let (col, row) = index2xy(p);
                                     let (tcol, trow) = index2xy(self.player.pos);
@@ -476,9 +476,8 @@ impl Game {
                                 .max_by(|x, y| x.2.cmp(&y.2))
                                 .unwrap();
                         } else if period(self.level, self.timecum) == Period::Chase {
-                            (g.direction, g.pos, _) = ghost_moves(g.pos)
+                            (g.direction, g.pos, _) = ghost_moves(g.pos, &self.board)
                                 .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
-                                .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                                 .map(|(d, p)| {
                                     let (col, row) = index2xy(p);
                                     let (tcol, trow) = index2xy(chase_target[gidx]);
@@ -488,12 +487,9 @@ impl Game {
                                 .unwrap();
                         } else {
                             // scatter mode
-                            let mut rng = rand::thread_rng();
-
-                            (g.direction, g.pos) = ghost_moves(g.pos)
+                            (g.direction, g.pos) = ghost_moves(g.pos, &self.board)
                                 .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
-                                .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
-                                .choose(&mut rng)
+                                .choose(&mut self.rng)
                                 .unwrap();
                         }
                     }
