@@ -45,15 +45,6 @@ fn level2fruit(level: u32) -> (&'static str, u32) {
     }
 }
 
-fn opposite_direction(dir: Direction) -> Direction {
-    match dir {
-        Direction::Right => Direction::Left,
-        Direction::Left => Direction::Right,
-        Direction::Down => Direction::Up,
-        Direction::Up => Direction::Down,
-    }
-}
-
 static LEVEL1MAP: &str = concat!(
     "############################",
     "#............##............#",
@@ -154,13 +145,25 @@ enum Direction {
     Right,
 }
 
+impl Direction {
+    pub fn opposite(&self) -> Direction {
+        use Direction::*;
+        match self {
+            Right => Left,
+            Left => Right,
+            Down => Up,
+            Up => Down,
+        }
+    }
+}
+
 enum GameState {
     UserQuit,
     SheetComplete,
     LifeLost,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 enum GhostState {
     Home,
     Gateway,
@@ -448,7 +451,7 @@ impl Game {
                         g.ghost_state = GhostState::Home;
                     } else {
                         (g.direction, g.pos, _) = ghost_moves(g.pos)
-                            .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
+                            .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
                             .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                             .map(|(d, p)| {
                                 let (col, row) = index2xy(p);
@@ -464,7 +467,6 @@ impl Game {
                         if g.edible_duration > 0 {
                             //flee pacman
                             (g.direction, g.pos, _) = ghost_moves(g.pos)
-                                //.filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
                                 .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                                 .map(|(d, p)| {
                                     let (col, row) = index2xy(p);
@@ -475,7 +477,7 @@ impl Game {
                                 .unwrap();
                         } else if period(self.level, self.timecum) == Period::Chase {
                             (g.direction, g.pos, _) = ghost_moves(g.pos)
-                                .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
+                                .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
                                 .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                                 .map(|(d, p)| {
                                     let (col, row) = index2xy(p);
@@ -489,7 +491,7 @@ impl Game {
                             let mut rng = rand::thread_rng();
 
                             (g.direction, g.pos) = ghost_moves(g.pos)
-                                .filter(|(d, _p)| *d != opposite_direction(g.direction)) // not go back
+                                .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
                                 .filter(|(_d, p)| matches!(self.board[*p], 'P' | ' ' | '.' | '$'))
                                 .choose(&mut rng)
                                 .unwrap();
@@ -676,23 +678,15 @@ fn another_game() -> io::Result<bool> {
     stdout().flush()?;
 
     loop {
-        match read() {
-            Ok(Event::Key(KeyEvent {
-                code: KeyCode::Char('y'),
+        match read()? {
+            Event::Key(KeyEvent {
+                code: KeyCode::Char(c),
                 ..
-            }))
-            | Ok(Event::Key(KeyEvent {
-                code: KeyCode::Char('Y'),
+            }) if matches!(c, 'y' | 'Y') => return Ok(true),
+            Event::Key(KeyEvent {
+                code: KeyCode::Char(c),
                 ..
-            })) => return Ok(true),
-            Ok(Event::Key(KeyEvent {
-                code: KeyCode::Char('n'),
-                ..
-            }))
-            | Ok(Event::Key(KeyEvent {
-                code: KeyCode::Char('N'),
-                ..
-            })) => return Ok(false),
+            }) if matches!(c, 'n' | 'N') => return Ok(false),
             _ => (),
         }
     }
@@ -844,11 +838,11 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
 
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
-        let (s, _bonus) = level2fruit(game.level);
+        let (fruit, _bonus) = level2fruit(game.level);
         for (i, c) in game.board.iter().enumerate() {
             if *c == '$' {
                 let (col, row) = index2xy(i);
-                crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),)?;
+                crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(fruit),)?;
             }
         }
     }
@@ -858,8 +852,7 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
 fn flash_board(game: &Game) -> io::Result<()> {
     for i in 0..10 {
         draw_board(game, i % 2 == 0)?;
-        stdout().flush().ok();
-
+        stdout().flush()?;
         thread::sleep(time::Duration::from_millis(300));
     }
     Ok(())
@@ -880,31 +873,22 @@ fn draw_player(game: &Game) -> io::Result<()> {
     )
 }
 
-fn draw_ghosts(game: &Game) {
-    game.ghosts.iter().enumerate().for_each(|(i, g)| {
-        let s = match g.ghost_state {
-            GhostState::Dead => "\u{1F440}",
-            _ => {
-                if game.board[g.pos] != 'H' && g.edible_duration > 0 {
-                    if g.edible_duration < 2000 {
-                        //"\u{1F631}".rapid_blink() // looks bad
-                        "\u{1F47D}" // alien
-                    } else {
-                        "\u{1F631}" // Scream
-                    }
-                } else {
-                    match i {
-                        0 => "\u{1F47A}", // Goblin
-                        1 => "\u{1F479}", // Ogre
-                        2 => "\u{1F47B}", // Ghost
-                        _ => "\u{1F383}", // Jack-O-Lantern
-                    }
-                }
-            }
+fn draw_ghosts(game: &Game) -> io::Result<()> {
+    //"\u{1F631}".rapid_blink() // looks bad
+    for (i, g) in game.ghosts.iter().enumerate() {
+        let s = match (g.ghost_state, game.board[g.pos] != 'H', i) {
+            (GhostState::Dead, _, _) => "\u{1F440}", // Eyes
+            (_, true, _) if (1..2000).contains(&g.edible_duration) => "\u{1F47D}", // Alien
+            (_, true, _) if g.edible_duration > 0 => "\u{1F631}", // Scream
+            (_, _, 0) => "\u{1F47A}",                // Goblin
+            (_, _, 1) => "\u{1F479}",                // Ogre
+            (_, _, 2) => "\u{1F47B}",                // Ghost
+            (_, _, _) => "\u{1F383}",                // Jack-O-Lantern
         };
         let (col, row) = index2xy(g.pos);
-        crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),).ok();
-    });
+        crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),)?;
+    }
+    Ok(())
 }
 
 //  The animated death and flashing screen happen syncronously. To be done
@@ -912,7 +896,7 @@ fn draw_ghosts(game: &Game) {
 fn draw_dynamic(game: &Game) -> io::Result<()> {
     draw_board(game, false)?;
     draw_player(game)?;
-    draw_ghosts(game);
+    draw_ghosts(game)?;
     render_rhs(game)?;
     stdout().flush()
 }
