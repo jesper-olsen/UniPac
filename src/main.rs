@@ -486,6 +486,36 @@ impl Game {
         }
     }
 
+    fn move_player(&mut self, idx: usize) -> io::Result<(bool)> {
+        match self.board[idx] {
+            '.' => {
+                self.score += 10;
+                self.dots_left -= 1;
+                self.board[idx] = ' ';
+            }
+            'P' => {
+                self.am.play("Audio/eatpill.ogg".to_string())?;
+                self.board[idx] = ' ';
+                self.ghosts_are_edible(self.pill_duration);
+                self.score += 50;
+                self.next_ghost_score = 200;
+            }
+            '$' if self.fruit_duration > 0 => {
+                self.am.play("Audio/eatpill.ogg".to_string())?;
+                let bonus = level2bonus(self.level).1;
+                self.score += bonus;
+                self.fruit_duration = 0;
+
+                draw_message(&format!("{}", bonus), false)?;
+                thread::sleep(time::Duration::from_millis(150));
+            }
+            ' ' => (),
+            _ => return Ok(false),
+        }
+        self.player.pos = idx;
+        Ok(true)
+    }
+
     fn update_player(&mut self, telaps: u128) -> io::Result<()> {
         self.player.timecum += telaps;
         while self.player.timecum > 100 {
@@ -494,41 +524,16 @@ impl Game {
         }
 
         let prev_score = self.score;
-        let mut idx = self.next_player_pos(self.player.last_input_direction);
-        match self.board[idx] {
-            'P' | ' ' | '.' | '$' => {
-                self.player.moving = self.player.last_input_direction;
-            }
-            _ => {
-                idx = self.next_player_pos(self.player.moving);
-            }
-        }
 
-        if matches!(self.board[idx], 'P' | ' ' | '.' | '$') {
-            self.player.pos = idx;
-            match self.board[idx] {
-                '.' => {
-                    self.score += 10;
-                    self.dots_left -= 1;
-                    self.board[idx] = ' ';
+        // Try moving in the preferred direction, then fallback to current movement
+        let idx = self.next_player_pos(self.player.last_input_direction);
+        match self.move_player(idx)? {
+            true => self.player.moving = self.player.last_input_direction,
+            false => {
+                let idx = self.next_player_pos(self.player.moving);
+                if !self.move_player(idx)? {
+                    return Ok(());
                 }
-                'P' => {
-                    self.am.play("Audio/eatpill.ogg".to_string())?;
-                    self.board[idx] = ' ';
-                    self.ghosts_are_edible(self.pill_duration);
-                    self.score += 50;
-                    self.next_ghost_score = 200;
-                }
-                '$' if self.fruit_duration > 0 => {
-                    self.am.play("Audio/eatpill.ogg".to_string())?;
-                    let bonus = level2bonus(self.level).1;
-                    self.score += bonus;
-                    self.fruit_duration = 0;
-
-                    draw_message(&format!("{}", bonus), false)?;
-                    thread::sleep(time::Duration::from_millis(150));
-                }
-                _ => (),
             }
         }
 
@@ -658,7 +663,7 @@ fn pause() -> io::Result<()> {
 
 fn render_game_info() -> io::Result<()> {
     let s1: &str = "UniPac - Unicode-powered Pacman";
-    let s2 = "Rusty Edition 2023 ";
+    let s2 = "Rusty Edition 2025 ";
 
     crossterm::queue!(
         stdout(),
@@ -671,8 +676,7 @@ fn render_game_info() -> io::Result<()> {
 }
 
 fn animate_dead_player(game: &Game) -> io::Result<()> {
-    let sz_anim = "|Vv_.+*X*+. ";
-    for ch in sz_anim.chars() {
+    for ch in "|Vv_.+*X*+. ".chars() {
         draw_board(game, false)?;
 
         let (col, row) = index2xy(game.player.pos);
