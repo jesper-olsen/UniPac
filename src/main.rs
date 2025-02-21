@@ -6,8 +6,6 @@ use crossterm::{
 };
 
 use rand::random;
-use rand::rngs::ThreadRng;
-use rand::seq::IteratorRandom;
 use std::collections::HashMap;
 use std::io::{self, stdout, Write};
 use std::{thread, time};
@@ -248,7 +246,6 @@ struct Game {
     next_ghost_score: u32,
     score: u32,
     am: AM,
-    rng: ThreadRng,
 }
 
 #[derive(PartialEq)]
@@ -305,7 +302,6 @@ impl Game {
             next_ghost_score: 0,
             score: 0,
             am: AM { manager, sounds },
-            rng: rand::thread_rng(),
         };
 
         game.initialise();
@@ -362,12 +358,12 @@ impl Game {
     }
 
     fn update_ghosts(&mut self, telaps: u128) {
-        // const _SCATTER_TARGET: [usize; 4] = [
-        //     0 * WIDTH + 2,
-        //     0 * WIDTH + WIDTH - 3,
-        //     24 * WIDTH + 0,
-        //     24 * WIDTH + WIDTH - 1,
-        // ];
+        const SCATTER_TARGET: [usize; 4] = [
+            0 * WIDTH + 2,
+            0 * WIDTH + WIDTH - 3,
+            24 * WIDTH + 0,
+            24 * WIDTH + WIDTH - 1,
+        ];
         // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
         let mut chase_target: [usize; 4] = [self.player.pos; 4];
         // Pinky - target pacman pos
@@ -389,7 +385,6 @@ impl Game {
             Down => self.player.pos + 4 * WIDTH,
         };
         // Inky - target average of pacman pos and Blinky
-        let (pcol, prow) = index2xy_usize(self.player.pos);
         let (bcol, brow) = index2xy_usize(self.ghosts[1].pos);
         let (tcol, trow) = ((pcol + bcol) / 2, (prow + brow) / 2);
 
@@ -399,7 +394,7 @@ impl Game {
         let (bcol, brow) = index2xy_usize(self.ghosts[3].pos);
         let dist = bcol.abs_diff(pcol).pow(2) + brow.abs_diff(prow).pow(2);
         if dist >= 64 {
-            chase_target[3] = xy2index(0, 2)
+            chase_target[3] = SCATTER_TARGET[3]
         }
 
         self.ghosts.iter_mut().enumerate().for_each(|(gidx, g)| {
@@ -453,11 +448,8 @@ impl Game {
                                 g.ghost_moves(&self.board, chase_target[gidx])[0];
                         } else {
                             // scatter mode
-                            (g.direction, g.pos) = g
-                                .ghost_moves(&self.board, g.pos)
-                                .into_iter()
-                                .choose(&mut self.rng)
-                                .unwrap();
+                            (g.direction, g.pos) =
+                                g.ghost_moves(&self.board, SCATTER_TARGET[gidx])[0];
                         }
                     }
                 } // Outside
@@ -486,7 +478,7 @@ impl Game {
         }
     }
 
-    fn move_player(&mut self, idx: usize) -> io::Result<(bool)> {
+    fn move_player(&mut self, idx: usize) -> io::Result<bool> {
         match self.board[idx] {
             '.' => {
                 self.score += 10;
@@ -813,17 +805,17 @@ fn flash_board(game: &Game) -> io::Result<()> {
 }
 
 fn draw_player(game: &Game) -> io::Result<()> {
-    let sz_anim = match game.player.last_input_direction {
+    let ch = match game.player.last_input_direction {
         Left => ['}', ')', '>', '-', '>', ')'],
         Right => ['{', '(', '<', '-', '<', '('],
         Up => ['V', 'V', 'V', 'V', '|', '|'],
         Down => ['^', '^', '^', '^', '|', '|'],
-    };
+    }[game.player.anim_frame];
     let (col, row) = index2xy(game.player.pos);
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(col, row),
-        style::PrintStyledContent(sz_anim[game.player.anim_frame].bold().yellow()),
+        style::PrintStyledContent(ch.bold().yellow()),
     )
 }
 
