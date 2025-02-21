@@ -31,7 +31,7 @@ fn pct(n: u8) -> bool {
     random::<u8>() % 100 < n
 }
 
-fn level2fruit(level: u32) -> (&'static str, u32) {
+fn level2bonus(level: u32) -> (&'static str, u32) {
     match level {
         0 => ("\u{1F352}", 100),        // cherries
         1 => ("\u{1F353}", 300),        // strawberry
@@ -144,9 +144,10 @@ enum Direction {
     Right,
 }
 
+use Direction::*;
+
 impl Direction {
     pub fn opposite(&self) -> Direction {
-        use Direction::*;
         match self {
             Right => Left,
             Left => Right,
@@ -181,7 +182,7 @@ impl Ghost {
     const fn new(pos: usize) -> Self {
         Ghost {
             pos,
-            direction: Direction::Left,
+            direction: Left,
             edible_duration: 0,
             ghost_state: GhostState::Home,
         }
@@ -200,8 +201,8 @@ struct Player {
 const PLAYER_INIT: Player = Player {
     pos: xy2index(14, 18),
     dead: false,
-    last_input_direction: Direction::Left,
-    moving: Direction::Left,
+    last_input_direction: Left,
+    moving: Left,
     anim_frame: 0,
     timecum: 0,
 };
@@ -244,25 +245,20 @@ fn period(level: u32, timecum: u128) -> Period {
 }
 
 fn ghost_moves(pos: usize, board: &[char]) -> impl Iterator<Item = (Direction, usize)> + use<'_> {
-    [
-        Direction::Right,
-        Direction::Left,
-        Direction::Down,
-        Direction::Up,
-    ]
-    .iter()
-    .map(move |d| {
-        let (col, row) = index2xy_usize(pos);
-        match (d, col) {
-            (Direction::Right, WIDTHM1) => (Direction::Right, row * WIDTH),
-            (Direction::Right, _) => (Direction::Right, pos + 1),
-            (Direction::Left, 0) => (Direction::Left, row * WIDTH + WIDTH - 1),
-            (Direction::Left, _) => (Direction::Left, pos - 1),
-            (Direction::Down, _) => (Direction::Down, pos + WIDTH),
-            (Direction::Up, _) => (Direction::Up, pos - WIDTH),
-        }
-    })
-    .filter(|(_d, p)| matches!(board[*p], 'P' | ' ' | '.' | '$'))
+    [Right, Left, Down, Up]
+        .iter()
+        .map(move |d| {
+            let (col, row) = index2xy_usize(pos);
+            match (d, col) {
+                (Right, WIDTHM1) => (Right, row * WIDTH),
+                (Right, _) => (Right, pos + 1),
+                (Left, 0) => (Left, row * WIDTH + WIDTH - 1),
+                (Left, _) => (Left, pos - 1),
+                (Down, _) => (Down, pos + WIDTH),
+                (Up, _) => (Up, pos - WIDTH),
+            }
+        })
+        .filter(|(_d, p)| matches!(board[*p], 'P' | ' ' | '.' | '$'))
 }
 
 impl Game {
@@ -382,19 +378,19 @@ impl Game {
         // Blinky - target 4 squares away from pacman
         let (pcol, prow) = index2xy_usize(self.player.pos);
         chase_target[1] = match self.player.moving {
-            Direction::Left => {
+            Left => {
                 let c: i32 = std::cmp::max(0, pcol as i32 - 4);
                 prow * WIDTH + c as usize
             }
-            Direction::Right => {
+            Right => {
                 let c: i32 = std::cmp::min((pcol + 4) as i32, WIDTHM1 as i32);
                 prow * WIDTH + c as usize
             }
-            Direction::Up => {
+            Up => {
                 let r: i32 = std::cmp::max(0, prow as i32 - 4);
                 r as usize * WIDTH + pcol
             }
-            Direction::Down => self.player.pos + 4 * WIDTH,
+            Down => self.player.pos + 4 * WIDTH,
         };
         // Inky - target average of pacman pos and Blinky
         let (pcol, prow) = index2xy_usize(self.player.pos);
@@ -437,8 +433,8 @@ impl Game {
                     g.pos -= WIDTH;
                     g.ghost_state = GhostState::Outside;
                     g.direction = match random::<u8>() % 2 {
-                        0 => Direction::Left,
-                        _ => Direction::Right,
+                        0 => Left,
+                        _ => Right,
                     }
                 }
 
@@ -447,7 +443,7 @@ impl Game {
                     // otherwise - don't go back, go in direction of target
                     if g.pos == 8 * WIDTH + 13 || g.pos == 8 * WIDTH + 14 {
                         g.pos += WIDTH;
-                        g.direction = Direction::Down;
+                        g.direction = Down;
                     } else if g.pos == 9 * WIDTH + 13 || g.pos == 9 * WIDTH + 14 {
                         g.pos += WIDTH;
                         g.ghost_state = GhostState::Home;
@@ -510,16 +506,16 @@ impl Game {
     fn next_player_pos(&self, d: Direction) -> usize {
         let col = self.player.pos % WIDTH;
         match d {
-            Direction::Right => match col {
+            Right => match col {
                 WIDTHM1 => self.player.pos - col, // tunnel
                 _ => self.player.pos + 1,
             },
-            Direction::Left => match col {
+            Left => match col {
                 0 => self.player.pos + (WIDTHM1 - col), // tunnel
                 _ => self.player.pos - 1,
             },
-            Direction::Down => self.player.pos + WIDTH,
-            Direction::Up => self.player.pos - WIDTH,
+            Down => self.player.pos + WIDTH,
+            Up => self.player.pos - WIDTH,
         }
     }
 
@@ -563,7 +559,7 @@ impl Game {
                     '$' => {
                         if self.fruit_duration > 0 {
                             self.am.play("Audio/eatpill.ogg".to_string());
-                            let (_ch, bonus) = level2fruit(self.level);
+                            let bonus = level2bonus(self.level).1;
                             self.score += bonus;
                             self.fruit_duration = 0;
 
@@ -771,8 +767,7 @@ fn render_rhs(game: &Game) -> io::Result<()> {
         style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
     )?;
 
-    let (ch, _bonus) = level2fruit(game.level);
-    draw_message_at(25 * WIDTH - 1, ch)?;
+    draw_message_at(25 * WIDTH - 1, level2bonus(game.level).0)?;
 
     let s = vec!['\u{1F642}'; game.lives as usize];
     let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
@@ -834,7 +829,7 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
 
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
-        let (fruit, _bonus) = level2fruit(game.level);
+        let fruit = level2bonus(game.level).0;
         for (i, c) in game.board.iter().enumerate() {
             if *c == '$' {
                 let (col, row) = index2xy(i);
@@ -856,10 +851,10 @@ fn flash_board(game: &Game) -> io::Result<()> {
 
 fn draw_player(game: &Game) -> io::Result<()> {
     let sz_anim = match game.player.last_input_direction {
-        Direction::Left => ['}', ')', '>', '-', '>', ')'],
-        Direction::Right => ['{', '(', '<', '-', '<', '('],
-        Direction::Up => ['V', 'V', 'V', 'V', '|', '|'],
-        Direction::Down => ['^', '^', '^', '^', '|', '|'],
+        Left => ['}', ')', '>', '-', '>', ')'],
+        Right => ['{', '(', '<', '-', '<', '('],
+        Up => ['V', 'V', 'V', 'V', '|', '|'],
+        Down => ['^', '^', '^', '^', '|', '|'],
     };
     let (col, row) = index2xy(game.player.pos);
     crossterm::queue!(
@@ -930,18 +925,18 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
                 Ok(Event::Key(KeyEvent {
                     code: KeyCode::Left,
                     ..
-                })) => Direction::Left,
+                })) => Left,
                 Ok(Event::Key(KeyEvent {
                     code: KeyCode::Right,
                     ..
-                })) => Direction::Right,
+                })) => Right,
                 Ok(Event::Key(KeyEvent {
                     code: KeyCode::Up, ..
-                })) => Direction::Up,
+                })) => Up,
                 Ok(Event::Key(KeyEvent {
                     code: KeyCode::Down,
                     ..
-                })) => Direction::Down,
+                })) => Down,
                 Ok(Event::Key(KeyEvent {
                     code: KeyCode::Char(' '),
                     ..
