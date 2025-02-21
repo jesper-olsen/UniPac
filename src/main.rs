@@ -14,7 +14,7 @@ use std::{thread, time};
 
 use kira::{
     manager::{backend::cpal::CpalBackend, AudioManager, AudioManagerSettings},
-    sound::static_sound::{StaticSoundData, StaticSoundSettings},
+    sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
 };
 
 const MAX_PACMAN_LIVES: u32 = 6;
@@ -136,7 +136,7 @@ static MARQUEE: &str = "--------- Plato --------------------------------- \
     seemingly trivial of contests, there is the potential for great insight and understanding.
     ------------------------------------------------------------------------------ ";
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum Direction {
     Up,
     Down,
@@ -186,6 +186,32 @@ impl Ghost {
             edible_duration: 0,
             ghost_state: GhostState::Home,
         }
+    }
+
+    fn ghost_moves(&self, board: &[char], target: usize) -> Vec<(Direction, usize)> {
+        let (col, row) = index2xy_usize(self.pos);
+        let (tcol, trow) = index2xy_usize(target);
+        let mut l: Vec<(usize, Direction, usize)> = [Right, Left, Down, Up]
+            .into_iter()
+            .map(move |d| match (d, col) {
+                (Right, WIDTHM1) => (Right, row * WIDTH),
+                (Right, _) => (Right, self.pos + 1),
+                (Left, 0) => (Left, row * WIDTH + WIDTH - 1),
+                (Left, _) => (Left, self.pos - 1),
+                (Down, _) => (Down, self.pos + WIDTH),
+                (Up, _) => (Up, self.pos - WIDTH),
+            })
+            .filter(|(_d, p)| matches!(board[*p], 'P' | ' ' | '.' | '$'))
+            .filter(|(d, _p)| self.edible_duration > 0 || *d != self.direction.opposite()) // not go back
+            .map(|(d, p)| {
+                let (ncol, nrow) = index2xy_usize(p);
+                let dst = tcol.abs_diff(ncol) + trow.abs_diff(nrow);
+                (dst, d, p)
+            })
+            .collect();
+        //l.sort();
+        l.sort_unstable_by_key(|(distance, _, _)| *distance);
+        l.into_iter().map(|(_, dir, pos)| (dir, pos)).collect()
     }
 }
 
@@ -244,23 +270,6 @@ fn period(level: u32, timecum: u128) -> Period {
     }
 }
 
-fn ghost_moves(pos: usize, board: &[char]) -> impl Iterator<Item = (Direction, usize)> + use<'_> {
-    [Right, Left, Down, Up]
-        .iter()
-        .map(move |d| {
-            let (col, row) = index2xy_usize(pos);
-            match (d, col) {
-                (Right, WIDTHM1) => (Right, row * WIDTH),
-                (Right, _) => (Right, pos + 1),
-                (Left, 0) => (Left, row * WIDTH + WIDTH - 1),
-                (Left, _) => (Left, pos - 1),
-                (Down, _) => (Down, pos + WIDTH),
-                (Up, _) => (Up, pos - WIDTH),
-            }
-        })
-        .filter(|(_d, p)| matches!(board[*p], 'P' | ' ' | '.' | '$'))
-}
-
 impl Game {
     fn new() -> Self {
         let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
@@ -271,7 +280,7 @@ impl Game {
             "Audio/die.ogg",
             "Audio/eatpill.ogg",
             "Audio/eatghost.ogg",
-            "Audio/extra lives.ogg",
+            "Audio/extra_lives.ogg",
             "Audio/opening_song.ogg",
         ]
         .iter()
@@ -305,13 +314,7 @@ impl Game {
 
     fn repopulate_board(&mut self) {
         self.board = LEVEL1MAP.chars().collect::<Vec<_>>().try_into().unwrap();
-        self.dots_left = self
-            .board
-            .iter()
-            .filter(|&c| *c == '.')
-            .count()
-            .try_into()
-            .unwrap();
+        self.dots_left = self.board.iter().filter(|&c| *c == '.').count() as u32;
         self.dots_left += 2; // +2 pseudo dots for fruit bonuses
     }
 
@@ -335,7 +338,7 @@ impl Game {
                 if g.edible_duration == 0 {
                     self.player.dead = true;
                 } else {
-                    self.am.play("Audio/eatghost.ogg".to_string());
+                    self.am.play("Audio/eatghost.ogg".to_string())?;
                     self.score += self.next_ghost_score;
 
                     draw_message_at(g.pos, &format!("{}", self.next_ghost_score))?;
@@ -355,14 +358,7 @@ impl Game {
         // if self.timecum > 500 {
         //     self.timecum = 0;
         // }
-
-        if self.fruit_duration > 0 {
-            if self.fruit_duration < telaps {
-                self.fruit_duration = 0;
-            } else {
-                self.fruit_duration -= telaps;
-            }
-        }
+        self.fruit_duration = self.fruit_duration.saturating_sub(telaps);
     }
 
     fn update_ghosts(&mut self, telaps: u128) {
@@ -401,11 +397,7 @@ impl Game {
 
         // Clyde - target pacman if less than 8 squares away - otherwise target corner
         let (bcol, brow) = index2xy_usize(self.ghosts[3].pos);
-        let bcol: i32 = bcol.try_into().unwrap();
-        let brow: i32 = brow.try_into().unwrap();
-        let pcol: i32 = pcol.try_into().unwrap();
-        let prow: i32 = prow.try_into().unwrap();
-        let dist = (bcol - pcol) * (bcol - pcol) + (brow - prow) * (brow - prow);
+        let dist = bcol.abs_diff(pcol).pow(2) + brow.abs_diff(prow).pow(2);
         if dist >= 64 {
             chase_target[3] = xy2index(0, 2)
         }
@@ -440,7 +432,6 @@ impl Game {
 
                 GhostState::Dead => {
                     // if at house gate - go in
-                    // otherwise - don't go back, go in direction of target
                     if g.pos == 8 * WIDTH + 13 || g.pos == 8 * WIDTH + 14 {
                         g.pos += WIDTH;
                         g.direction = Down;
@@ -448,43 +439,23 @@ impl Game {
                         g.pos += WIDTH;
                         g.ghost_state = GhostState::Home;
                     } else {
-                        (g.direction, g.pos, _) = ghost_moves(g.pos, &self.board)
-                            .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
-                            .map(|(d, p)| {
-                                let (col, row) = index2xy(p);
-                                let (tcol, trow) = index2xy(8 * WIDTH + 13);
-                                (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
-                            })
-                            .min_by(|x, y| x.2.cmp(&y.2))
-                            .unwrap();
+                        (g.direction, g.pos) = g.ghost_moves(&self.board, 8 * WIDTH + 13)[0];
                     }
                 }
                 GhostState::Outside => {
                     if !slowdown_ghost(g, self.level) {
                         if g.edible_duration > 0 {
                             //flee pacman
-                            (g.direction, g.pos, _) = ghost_moves(g.pos, &self.board)
-                                .map(|(d, p)| {
-                                    let (col, row) = index2xy(p);
-                                    let (tcol, trow) = index2xy(self.player.pos);
-                                    (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
-                                })
-                                .max_by(|x, y| x.2.cmp(&y.2))
-                                .unwrap();
+                            (g.direction, g.pos) =
+                                *g.ghost_moves(&self.board, self.player.pos).last().unwrap();
                         } else if period(self.level, self.timecum) == Period::Chase {
-                            (g.direction, g.pos, _) = ghost_moves(g.pos, &self.board)
-                                .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
-                                .map(|(d, p)| {
-                                    let (col, row) = index2xy(p);
-                                    let (tcol, trow) = index2xy(chase_target[gidx]);
-                                    (d, p, tcol.abs_diff(col) + trow.abs_diff(row))
-                                })
-                                .min_by(|x, y| x.2.cmp(&y.2))
-                                .unwrap();
+                            (g.direction, g.pos) =
+                                g.ghost_moves(&self.board, chase_target[gidx])[0];
                         } else {
                             // scatter mode
-                            (g.direction, g.pos) = ghost_moves(g.pos, &self.board)
-                                .filter(|(d, _p)| *d != g.direction.opposite()) // not go back
+                            (g.direction, g.pos) = g
+                                .ghost_moves(&self.board, g.pos)
+                                .into_iter()
                                 .choose(&mut self.rng)
                                 .unwrap();
                         }
@@ -527,9 +498,7 @@ impl Game {
         }
 
         let prev_score = self.score;
-
         let mut idx = self.next_player_pos(self.player.last_input_direction);
-
         match self.board[idx] {
             'P' | ' ' | '.' | '$' => {
                 self.player.moving = self.player.last_input_direction;
@@ -539,43 +508,37 @@ impl Game {
             }
         }
 
-        let ch = self.board[idx];
-        match ch {
-            'P' | ' ' | '.' | '$' => {
-                self.player.pos = idx;
-                match ch {
-                    '.' => {
-                        self.score += 10;
-                        self.dots_left -= 1;
-                        self.board[idx] = ' ';
-                    }
-                    'P' => {
-                        self.am.play("Audio/eatpill.ogg".to_string());
-                        self.board[idx] = ' ';
-                        self.ghosts_are_edible(self.pill_duration);
-                        self.score += 50;
-                        self.next_ghost_score = 200;
-                    }
-                    '$' => {
-                        if self.fruit_duration > 0 {
-                            self.am.play("Audio/eatpill.ogg".to_string());
-                            let bonus = level2bonus(self.level).1;
-                            self.score += bonus;
-                            self.fruit_duration = 0;
-
-                            draw_message(format!("{}", bonus).as_str(), false)?;
-                            thread::sleep(time::Duration::from_millis(150));
-                        }
-                    }
-                    _ => (),
+        if matches!(self.board[idx], 'P' | ' ' | '.' | '$') {
+            self.player.pos = idx;
+            match self.board[idx] {
+                '.' => {
+                    self.score += 10;
+                    self.dots_left -= 1;
+                    self.board[idx] = ' ';
                 }
+                'P' => {
+                    self.am.play("Audio/eatpill.ogg".to_string())?;
+                    self.board[idx] = ' ';
+                    self.ghosts_are_edible(self.pill_duration);
+                    self.score += 50;
+                    self.next_ghost_score = 200;
+                }
+                '$' if self.fruit_duration > 0 => {
+                    self.am.play("Audio/eatpill.ogg".to_string())?;
+                    let bonus = level2bonus(self.level).1;
+                    self.score += bonus;
+                    self.fruit_duration = 0;
+
+                    draw_message(&format!("{}", bonus), false)?;
+                    thread::sleep(time::Duration::from_millis(150));
+                }
+                _ => (),
             }
-            _ => (),
         }
 
         if prev_score < 10000 && self.score >= 10000 && self.lives < MAX_PACMAN_LIVES {
             self.lives += 1;
-            self.am.play("Audio/extra lives.ogg".to_string());
+            self.am.play("Audio/extra_lives.ogg".to_string())?;
         }
 
         if self.score > self.high_score {
@@ -973,10 +936,10 @@ struct AM {
 }
 
 impl AM {
-    fn play(&mut self, name: String) {
+    fn play(&mut self, name: String) -> Result<StaticSoundHandle, std::io::Error> {
         self.manager
             .play(self.sounds.get(&name).unwrap().clone())
-            .ok();
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 
@@ -990,7 +953,9 @@ fn main_game() -> io::Result<()> {
         match game_loop(&mut game)? {
             GameState::UserQuit => return Ok(()),
             GameState::SheetComplete => {
-                game.am.play("Audio/opening_song.ogg".to_string());
+                game.am
+                    .play("Audio/opening_song.ogg".to_string())
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                 flash_board(&game)?;
                 game.level += 1;
                 game.repopulate_board();
@@ -1000,7 +965,9 @@ fn main_game() -> io::Result<()> {
             }
             GameState::LifeLost => {
                 render_rhs(&game)?;
-                game.am.play("Audio/die.ogg".to_string());
+                game.am
+                    .play("Audio/die.ogg".to_string())
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                 animate_dead_player(&game)?;
                 if game.lives == 0 {
                     return Ok(());
