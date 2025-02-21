@@ -474,17 +474,13 @@ impl Game {
         Ok(())
     }
 
-    fn next_player_pos(&self, d: Direction) -> usize {
+    fn next_player_pos(&self, direction: Direction) -> usize {
         let col = self.player.pos % WIDTH;
-        match d {
-            Right => match col {
-                WIDTHM1 => self.player.pos - col, // tunnel
-                _ => self.player.pos + 1,
-            },
-            Left => match col {
-                0 => self.player.pos + (WIDTHM1 - col), // tunnel
-                _ => self.player.pos - 1,
-            },
+        match direction {
+            Right if col == WIDTHM1 => self.player.pos - col, // tunnel
+            Right => self.player.pos + 1,
+            Left if col == 0 => self.player.pos + WIDTHM1 - col, // tunnel
+            Left => self.player.pos - 1,
             Down => self.player.pos + WIDTH,
             Up => self.player.pos - WIDTH,
         }
