@@ -43,30 +43,30 @@ fn level2bonus(level: u32) -> (&'static str, u32) {
 }
 
 static LEVEL1MAP: &str = concat!(
-    "############################",
-    "#............##............#",
-    "#.####.#####.##.#####.####.#",
-    "#P####.#####.##.#####.####P#",
-    "#..........................#",
-    "#.####.##.########.##.####.#",
-    "#......##....##....##......#",
-    "######.##### ## #####.######",
-    "     #.##          ##.#     ",
-    "     #.## ###--### ##.#     ",
-    "######.## # HHHH # ##.######",
-    "      .   # HHHH #   .      ",
-    "######.## # HHHH # ##.######",
-    "     #.## ######## ##.#     ",
-    "     #.##    $     ##.#     ",
-    "######.## ######## ##.######",
-    "#............##............#",
-    "#.####.#####.##.#####.####.#",
-    "#P..##................##..P#",
-    "###.##.##.########.##.##.###",
-    "#......##....##....##......#",
-    "#.##########.##.##########.#",
-    "#..........................#",
-    "############################",
+    "############################", //  0
+    "#............##............#", //  1
+    "#.####.#####.##.#####.####.#", //  2
+    "#P####.#####.##.#####.####P#", //  3
+    "#..........................#", //  4
+    "#.####.##.########.##.####.#", //  5
+    "#......##....##....##......#", //  6
+    "######.##### ## #####.######", //  7
+    "     #.##          ##.#     ", //  8
+    "     #.## ###--### ##.#     ", //  9
+    "######.## # HHHH # ##.######", // 10
+    "      .   # HHHH #   .      ", // 11
+    "######.## # HHHH # ##.######", // 12
+    "     #.## ######## ##.#     ", // 13
+    "     #.##    $     ##.#     ", // 14
+    "######.## ######## ##.######", // 15
+    "#............##............#", // 16
+    "#.####.#####.##.#####.####.#", // 17
+    "#P..##................##..P#", // 18
+    "###.##.##.########.##.##.###", // 19
+    "#......##....##....##......#", // 20
+    "#.##########.##.##########.#", // 21
+    "#..........................#", // 22
+    "############################", // 23
 );
 
 fn tunnel(pos: usize) -> bool {
@@ -89,6 +89,7 @@ fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
 }
 
 fn index2xy(i: usize) -> (u16, u16) {
+    // crossterm needs u16 coordinates - this version of index2xy is for that
     (
         (i % WIDTH).try_into().unwrap(),
         (i / WIDTH).try_into().unwrap(),
@@ -171,7 +172,7 @@ enum GhostState {
 
 struct Ghost {
     pos: usize,
-    ghost_state: GhostState,
+    state: GhostState,
     edible_duration: u128,
     direction: Direction,
 }
@@ -182,34 +183,48 @@ impl Ghost {
             pos,
             direction: Left,
             edible_duration: 0,
-            ghost_state: GhostState::Home,
+            state: GhostState::Home,
         }
     }
 
-    fn ghost_moves(&self, board: &[char], target: usize) -> Vec<(Direction, usize)> {
+    fn ghost_moves(&self, board: &[char], target: usize) -> (Direction, usize) {
         let (col, row) = index2xy_usize(self.pos);
         let (tcol, trow) = index2xy_usize(target);
-        let mut l: Vec<(usize, Direction, usize)> = [Right, Left, Down, Up]
+
+        [Right, Left, Down, Up]
             .into_iter()
-            .map(move |d| match (d, col) {
-                (Right, WIDTHM1) => (Right, row * WIDTH),
-                (Right, _) => (Right, self.pos + 1),
-                (Left, 0) => (Left, row * WIDTH + WIDTH - 1),
-                (Left, _) => (Left, self.pos - 1),
-                (Down, _) => (Down, self.pos + WIDTH),
-                (Up, _) => (Up, self.pos - WIDTH),
+            .filter_map(|d| {
+                let p = match (d, col) {
+                    (Right, WIDTHM1) => row * WIDTH, // Tunnel
+                    (Right, _) => self.pos + 1,
+                    (Left, 0) => row * WIDTH + WIDTH - 1, // Tunnel
+                    (Left, _) => self.pos - 1,
+                    (Down, _) => self.pos + WIDTH,
+                    (Up, _) => self.pos - WIDTH,
+                };
+
+                // never go back unless fleeing pacman
+                if matches!(board[p], 'P' | ' ' | '.' | '$')
+                    && (self.edible_duration > 0 || d != self.direction.opposite())
+                {
+                    let (ncol, nrow) = index2xy_usize(p);
+                    let dst = tcol.abs_diff(ncol) + trow.abs_diff(nrow);
+                    Some((dst as isize, d, p))
+                } else {
+                    None
+                }
             })
-            .filter(|(_d, p)| matches!(board[*p], 'P' | ' ' | '.' | '$'))
-            .filter(|(d, _p)| self.edible_duration > 0 || *d != self.direction.opposite()) // not go back
-            .map(|(d, p)| {
-                let (ncol, nrow) = index2xy_usize(p);
-                let dst = tcol.abs_diff(ncol) + trow.abs_diff(nrow);
-                (dst, d, p)
-            })
-            .collect();
-        //l.sort();
-        l.sort_unstable_by_key(|(distance, _, _)| *distance);
-        l.into_iter().map(|(_, dir, pos)| (dir, pos)).collect()
+            .max_by_key(
+                |&(dst, _, _)| {
+                    if self.edible_duration > 0 {
+                        dst
+                    } else {
+                        -dst
+                    }
+                },
+            ) // Maximize when edible (flee pacman), minimize otherwise
+            .map(|(_, dir, pos)| (dir, pos))
+            .unwrap_or((self.direction, self.pos)) // Default to stay in place if no move is possible - never happens
     }
 }
 
@@ -304,7 +319,8 @@ impl Game {
             am: AM { manager, sounds },
         };
 
-        game.initialise();
+        game.repopulate_board();
+        game.ghosts = GHOSTS_INIT;
         game
     }
 
@@ -314,15 +330,10 @@ impl Game {
         self.dots_left += 2; // +2 pseudo dots for fruit bonuses
     }
 
-    fn initialise(&mut self) {
-        self.repopulate_board();
-        self.ghosts = GHOSTS_INIT;
-    }
-
     fn ghosts_are_edible(&mut self, duration: u128) {
         self.ghosts
             .iter_mut()
-            .filter(|g| g.ghost_state == GhostState::Outside)
+            .filter(|g| g.state == GhostState::Outside)
             .for_each(|g| {
                 g.edible_duration += duration;
             })
@@ -330,7 +341,7 @@ impl Game {
 
     fn check_player_vs_ghosts(&mut self) -> io::Result<()> {
         for g in self.ghosts.iter_mut() {
-            if g.ghost_state != GhostState::Dead && g.pos == self.player.pos {
+            if g.state != GhostState::Dead && g.pos == self.player.pos {
                 if g.edible_duration == 0 {
                     self.player.dead = true;
                 } else {
@@ -341,7 +352,7 @@ impl Game {
                     thread::sleep(time::Duration::from_millis(150));
 
                     self.next_ghost_score *= 2;
-                    g.ghost_state = GhostState::Dead;
+                    g.state = GhostState::Dead;
                     g.edible_duration = 0;
                 }
             }
@@ -359,10 +370,14 @@ impl Game {
 
     fn update_ghosts(&mut self, telaps: u128) {
         const SCATTER_TARGET: [usize; 4] = [
-            0 * WIDTH + 2,
-            0 * WIDTH + WIDTH - 3,
-            24 * WIDTH + 0,
-            24 * WIDTH + WIDTH - 1,
+            xy2index(2, 0),
+            xy2index(WIDTH - 3, 0),
+            xy2index(0, 24),
+            xy2index(WIDTH - 1, 24),
+            // 0 * WIDTH + 2,
+            // 0 * WIDTH + WIDTH - 3,
+            // 24 * WIDTH + 0,
+            // 24 * WIDTH + WIDTH - 1,
         ];
         // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
         let mut chase_target: [usize; 4] = [self.player.pos; 4];
@@ -403,7 +418,7 @@ impl Game {
             } else {
                 g.edible_duration - telaps
             };
-            match g.ghost_state {
+            match g.state {
                 GhostState::Home => {
                     let a: [usize; 4] = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
                     let idx = a[random::<usize>() % a.len()];
@@ -411,14 +426,14 @@ impl Game {
                         'H' => g.pos = idx,
                         '-' => {
                             g.pos = idx;
-                            g.ghost_state = GhostState::Gateway;
+                            g.state = GhostState::Gateway;
                         }
                         _ => (),
                     }
                 }
                 GhostState::Gateway => {
                     g.pos -= WIDTH;
-                    g.ghost_state = GhostState::Outside;
+                    g.state = GhostState::Outside;
                     g.direction = match random::<u8>() % 2 {
                         0 => Left,
                         _ => Right,
@@ -432,24 +447,21 @@ impl Game {
                         g.direction = Down;
                     } else if g.pos == 9 * WIDTH + 13 || g.pos == 9 * WIDTH + 14 {
                         g.pos += WIDTH;
-                        g.ghost_state = GhostState::Home;
+                        g.state = GhostState::Home;
                     } else {
-                        (g.direction, g.pos) = g.ghost_moves(&self.board, 8 * WIDTH + 13)[0];
+                        (g.direction, g.pos) = g.ghost_moves(&self.board, 8 * WIDTH + 13);
                     }
                 }
                 GhostState::Outside => {
                     if !slowdown_ghost(g, self.level) {
                         if g.edible_duration > 0 {
                             //flee pacman
-                            (g.direction, g.pos) =
-                                *g.ghost_moves(&self.board, self.player.pos).last().unwrap();
+                            (g.direction, g.pos) = g.ghost_moves(&self.board, self.player.pos)
                         } else if period(self.level, self.timecum) == Period::Chase {
-                            (g.direction, g.pos) =
-                                g.ghost_moves(&self.board, chase_target[gidx])[0];
+                            (g.direction, g.pos) = g.ghost_moves(&self.board, chase_target[gidx]);
                         } else {
                             // scatter mode
-                            (g.direction, g.pos) =
-                                g.ghost_moves(&self.board, SCATTER_TARGET[gidx])[0];
+                            (g.direction, g.pos) = g.ghost_moves(&self.board, SCATTER_TARGET[gidx]);
                         }
                     }
                 } // Outside
@@ -479,6 +491,7 @@ impl Game {
     }
 
     fn move_player(&mut self, idx: usize) -> io::Result<bool> {
+        // move may not be valid - return true if valid
         match self.board[idx] {
             '.' => {
                 self.score += 10;
@@ -517,7 +530,7 @@ impl Game {
 
         let prev_score = self.score;
 
-        // Try moving in the preferred direction, then fallback to current movement
+        // Try moving in input direction, then fallback to current movement
         let idx = self.next_player_pos(self.player.last_input_direction);
         match self.move_player(idx)? {
             true => self.player.moving = self.player.last_input_direction,
@@ -628,13 +641,13 @@ fn another_game() -> io::Result<bool> {
     loop {
         match read()? {
             Event::Key(KeyEvent {
-                code: KeyCode::Char(c),
+                code: KeyCode::Char('y' | 'Y'),
                 ..
-            }) if matches!(c, 'y' | 'Y') => return Ok(true),
+            }) => return Ok(true),
             Event::Key(KeyEvent {
-                code: KeyCode::Char(c),
+                code: KeyCode::Char('n' | 'N'),
                 ..
-            }) if matches!(c, 'n' | 'N') => return Ok(false),
+            }) => return Ok(false),
             _ => (),
         }
     }
@@ -822,7 +835,7 @@ fn draw_player(game: &Game) -> io::Result<()> {
 fn draw_ghosts(game: &Game) -> io::Result<()> {
     //"\u{1F631}".rapid_blink() // looks bad
     for (i, g) in game.ghosts.iter().enumerate() {
-        let s = match (g.ghost_state, game.board[g.pos] != 'H', i) {
+        let s = match (g.state, game.board[g.pos] != 'H', i) {
             (GhostState::Dead, _, _) => "\u{1F440}", // Eyes
             (_, true, _) if (1..2000).contains(&g.edible_duration) => "\u{1F47D}", // Alien
             (_, true, _) if g.edible_duration > 0 => "\u{1F631}", // Scream
