@@ -25,5 +25,5 @@ Controls are on the arrow keys.
 Credits:
 * Steven Goodwin's [C version](https://github.com/MarquisdeGeek/pacman) of the game.
 * Sound assets from Dale Harvey's [JS version](https://github.com/daleharvey/pacman)
-* Marquee text by [ChatGPT 3.5](https://chat.openai.com/)
+* Marquee text by [ChatGPT](https://chat.openai.com/)
 * [The Pac-Man Dossier](https://pacman.holenet.info)

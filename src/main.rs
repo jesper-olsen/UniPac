@@ -1,17 +1,17 @@
 use crossterm::{
     cursor,
-    event::{poll, read, Event, KeyCode, KeyEvent},
+    event::{Event, KeyCode, KeyEvent, poll, read},
     style::{self, Stylize},
     terminal, //QueueableCommand, Result,
 };
 
 use rand::random;
 use std::collections::HashMap;
-use std::io::{self, stdout, Write};
+use std::io::{self, Write, stdout};
 use std::{thread, time};
 
 use kira::{
-    manager::{backend::cpal::CpalBackend, AudioManager, AudioManagerSettings},
+    manager::{AudioManager, AudioManagerSettings, backend::cpal::CpalBackend},
     sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
 };
 
@@ -104,36 +104,24 @@ const fn xy2index(col: usize, row: usize) -> usize {
     row * WIDTH + col
 }
 
-static MARQUEE: &str = "--------- Plato --------------------------------- \
-    Socrates: Greetings, my dear Plato. What is it that captures your attention so? \
-    \
-    Plato: Ah, Socrates, I have been observing a most intriguing phenomenon. \
-    Have you heard of the game known as Pacman? \
-    \
-    Socrates: Pacman? Pray tell, what is this game that has caught your interest? \
-    \
-    Plato: It is a game of strategy and wit, where a yellow character named Pacman \
-    must navigate through a maze and consume small pellets while being pursued by a group of ghostly apparitions. \
-    \
-    Socrates: Intriguing indeed. And what have you observed about this game? \
-    \
-    Plato: I have observed that the struggle between Pacman and the ghosts is one of balance and tension. \
-    Pacman must navigate the maze while being pursued by the ghosts, who seek to impede his progress and \
-    \
-    Socrates: And what of Pacman's own abilities? Does he not possess any power to defeat the ghosts? \
-    \
-    Plato: Indeed, he does. At times, Pacman is able to consume a power pellet, which imbues him with the \
-    ability to turn the tables on the ghosts and consume them in turn. \
-    \
-    Socrates: Fascinating! It would seem that this struggle is one of strategy and timing, with each side \
-    seeking to outmaneuver the other. \
-    \
-    Plato: Precisely, my dear Socrates. The struggle between Pacman and the ghosts is a microcosm of the \
-    larger struggle between order and chaos, between the forces of light and darkness. \
-    \
-    Socrates: Indeed, my dear Plato. This game provides us with a valuable lesson: that even in the most \
-    seemingly trivial of contests, there is the potential for great insight and understanding.
-    ------------------------------------------------------------------------------ ";
+static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man\
+    Scene: A quiet garden in Athens. Plato and Socrates sit on a stone bench, discussing the nature of games.\
+    Socrates: Tell me, Plato, have you observed this peculiar game known as Pac-Man?\
+    Plato: I have heard of it, Socrates, though I confess I do not fully grasp its essence.\
+    Socrates: It is a game in which a small, ever-hungry being, pursued by ghosts, traverses a maze, consuming pellets for sustenance.\
+    Plato: A curious notion! But tell me, Socrates, what wisdom is to be found in such a pursuit?\
+    Socrates: Ah, my dear Plato, is it not the case that in life we, too, navigate a labyrinth filled with obstacles, ever striving for fulfillment, yet always pursued by unseen forces?\
+    Plato: You suggest that the game is an allegory for the human condition?\
+    Socrates: Indeed. Consider the ghosts—are they not akin to our fears and regrets, which chase us through the corridors of existence? Yet, when Pac-Man finds the mighty Power Pellet, he turns upon his pursuers. Is this not a lesson in courage? That with wisdom and preparation, we may face our fears and render them powerless? \
+    Plato: A compelling thought, Socrates. Yet, the maze itself—does it not resemble my own theory of forms? For within the cave of the game screen, shadows flicker, but the true reality, the ideal Pac-Man, exists beyond it. \
+    Socrates: You imply that what we see on the screen is but an imitation of a higher truth?\
+    Plato: Precisely! The game is but a shadow of the true game—an ideal form where every move is perfect, every strategy divine.\
+    Socrates: And yet, Plato, if the game is but an imitation, does that make the pursuit meaningless? Or is it, rather, a reflection of the soul’s journey, ever striving for perfection but constrained by its mortal form?\
+    Plato: I see now, Socrates! Pac-Man is not merely a game—it is philosophy in motion. The wise player, like the philosopher, must understand the patterns of the maze, anticipate the movements of fate, and seize opportunity when it appears.\
+    Socrates: You have grasped it well, my friend. But tell me-shall we now play a round and test our understanding in practice?\
+    Plato: Only if you promise not to engage me in paradoxes while I concentrate!\
+    (They both laugh as they rise, their discourse having brought them to a newfound appreciation of both wisdom and play.)\
+    Fin.";
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum Direction {
@@ -216,11 +204,7 @@ impl Ghost {
             })
             .max_by_key(
                 |&(dst, _, _)| {
-                    if self.edible_duration > 0 {
-                        dst
-                    } else {
-                        -dst
-                    }
+                    if self.edible_duration > 0 { dst } else { -dst }
                 },
             ) // Maximize when edible (flee pacman), minimize otherwise
             .map(|(_, dir, pos)| (dir, pos))
