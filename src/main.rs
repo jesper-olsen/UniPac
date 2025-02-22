@@ -175,7 +175,7 @@ impl Ghost {
         }
     }
 
-    fn ghost_moves(&self, board: &[char], target: usize) -> (Direction, usize) {
+    fn moves(&self, board: &[char], target: usize) -> (Direction, usize) {
         let (col, row) = index2xy_usize(self.pos);
         let (tcol, trow) = index2xy_usize(target);
 
@@ -396,61 +396,52 @@ impl Game {
             chase_target[3] = SCATTER_TARGET[3]
         }
 
-        self.ghosts.iter_mut().enumerate().for_each(|(gidx, g)| {
-            g.edible_duration = if g.edible_duration < telaps {
-                0
-            } else {
-                g.edible_duration - telaps
-            };
-            match g.state {
+        for (gidx, g) in self.ghosts.iter_mut().enumerate() {
+            g.edible_duration = g.edible_duration.saturating_sub(telaps);
+            (g.direction, g.pos) = match g.state {
                 GhostState::Home => {
-                    let a: [usize; 4] = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
+                    let a = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
                     let idx = a[random::<usize>() % a.len()];
                     match self.board[idx] {
-                        'H' => g.pos = idx,
+                        'H' => (Left, idx),
                         '-' => {
-                            g.pos = idx;
                             g.state = GhostState::Gateway;
+                            (Left, idx)
                         }
-                        _ => (),
+                        _ => (g.direction, g.pos),
                     }
                 }
                 GhostState::Gateway => {
-                    g.pos -= WIDTH;
                     g.state = GhostState::Outside;
-                    g.direction = match random::<u8>() % 2 {
-                        0 => Left,
-                        _ => Right,
+                    match random::<u8>() % 2 {
+                        0 => (Left, g.pos - WIDTH),
+                        _ => (Right, g.pos - WIDTH),
                     }
                 }
 
                 GhostState::Dead => {
                     // if at house gate - go in
                     if g.pos == 8 * WIDTH + 13 || g.pos == 8 * WIDTH + 14 {
-                        g.pos += WIDTH;
-                        g.direction = Down;
+                        (Down, g.pos + WIDTH)
                     } else if g.pos == 9 * WIDTH + 13 || g.pos == 9 * WIDTH + 14 {
-                        g.pos += WIDTH;
                         g.state = GhostState::Home;
+                        (g.direction, g.pos + WIDTH)
                     } else {
-                        (g.direction, g.pos) = g.ghost_moves(&self.board, 8 * WIDTH + 13);
+                        g.moves(&self.board, 8 * WIDTH + 13)
                     }
                 }
                 GhostState::Outside => {
-                    if !slowdown_ghost(g, self.level) {
-                        if g.edible_duration > 0 {
-                            //flee pacman
-                            (g.direction, g.pos) = g.ghost_moves(&self.board, self.player.pos)
-                        } else if period(self.level, self.timecum) == Period::Chase {
-                            (g.direction, g.pos) = g.ghost_moves(&self.board, chase_target[gidx]);
-                        } else {
-                            // scatter mode
-                            (g.direction, g.pos) = g.ghost_moves(&self.board, SCATTER_TARGET[gidx]);
-                        }
+                    if slowdown_ghost(g, self.level) {
+                        continue;
                     }
-                } // Outside
+                    match (g.edible_duration > 0, period(self.level, self.timecum)) {
+                        (true, _) => g.moves(&self.board, self.player.pos),
+                        (false, Period::Chase) => g.moves(&self.board, chase_target[gidx]),
+                        (false, Period::Scatter) => g.moves(&self.board, SCATTER_TARGET[gidx]),
+                    }
+                }
             } // match ghost_state
-        })
+        }
     }
 
     fn update(&mut self, dur: u128) -> io::Result<()> {
