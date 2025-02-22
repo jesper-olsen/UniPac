@@ -2,7 +2,7 @@ use crossterm::{
     cursor,
     event::{Event, KeyCode, KeyEvent, poll, read},
     style::{self, Stylize},
-    terminal, //QueueableCommand, Result,
+    terminal,
 };
 
 use rand::random;
@@ -74,29 +74,13 @@ fn tunnel(pos: usize) -> bool {
         || (11 * WIDTH + 22..=11 * WIDTH + WIDTHM1).contains(&pos)
 }
 
-fn slowdown_ghost(g: &Ghost, level: u32) -> bool {
-    match level {
-        0 if tunnel(g.pos) => pct(60),
-        0 if g.edible_duration > 0 => pct(60),
-        0 => pct(25),
-        1..=3 if tunnel(g.pos) => pct(55),
-        1..=3 if g.edible_duration > 0 => pct(50),
-        1..=3 => pct(15),
-        _ if tunnel(g.pos) => pct(50),
-        _ if g.edible_duration > 0 => pct(45),
-        _ => pct(5),
-    }
-}
-
-fn index2xy(i: usize) -> (u16, u16) {
+const fn index2xy(i: usize) -> (u16, u16) {
     // crossterm needs u16 coordinates - this version of index2xy is for that
-    (
-        (i % WIDTH).try_into().unwrap(),
-        (i / WIDTH).try_into().unwrap(),
-    )
+    let (col, row) = index2xy_usize(i);
+    (col as u16, row as u16)
 }
 
-fn index2xy_usize(i: usize) -> (usize, usize) {
+const fn index2xy_usize(i: usize) -> (usize, usize) {
     (i % WIDTH, i / WIDTH)
 }
 
@@ -104,23 +88,23 @@ const fn xy2index(col: usize, row: usize) -> usize {
     row * WIDTH + col
 }
 
-static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man\
-    Scene: A quiet garden in Athens. Plato and Socrates sit on a stone bench, discussing the nature of games.\
-    Socrates: Tell me, Plato, have you observed this peculiar game known as Pac-Man?\
-    Plato: I have heard of it, Socrates, though I confess I do not fully grasp its essence.\
-    Socrates: It is a game in which a small, ever-hungry being, pursued by ghosts, traverses a maze, consuming pellets for sustenance.\
-    Plato: A curious notion! But tell me, Socrates, what wisdom is to be found in such a pursuit?\
-    Socrates: Ah, my dear Plato, is it not the case that in life we, too, navigate a labyrinth filled with obstacles, ever striving for fulfillment, yet always pursued by unseen forces?\
-    Plato: You suggest that the game is an allegory for the human condition?\
-    Socrates: Indeed. Consider the ghosts—are they not akin to our fears and regrets, which chase us through the corridors of existence? Yet, when Pac-Man finds the mighty Power Pellet, he turns upon his pursuers. Is this not a lesson in courage? That with wisdom and preparation, we may face our fears and render them powerless? \
-    Plato: A compelling thought, Socrates. Yet, the maze itself—does it not resemble my own theory of forms? For within the cave of the game screen, shadows flicker, but the true reality, the ideal Pac-Man, exists beyond it. \
-    Socrates: You imply that what we see on the screen is but an imitation of a higher truth?\
-    Plato: Precisely! The game is but a shadow of the true game—an ideal form where every move is perfect, every strategy divine.\
-    Socrates: And yet, Plato, if the game is but an imitation, does that make the pursuit meaningless? Or is it, rather, a reflection of the soul’s journey, ever striving for perfection but constrained by its mortal form?\
-    Plato: I see now, Socrates! Pac-Man is not merely a game—it is philosophy in motion. The wise player, like the philosopher, must understand the patterns of the maze, anticipate the movements of fate, and seize opportunity when it appears.\
-    Socrates: You have grasped it well, my friend. But tell me-shall we now play a round and test our understanding in practice?\
-    Plato: Only if you promise not to engage me in paradoxes while I concentrate!\
-    (They both laugh as they rise, their discourse having brought them to a newfound appreciation of both wisdom and play.)\
+static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man. \
+    Scene: A quiet garden in Athens. Plato and Socrates sit on a stone bench, discussing the nature of games. \
+    Socrates: Tell me, Plato, have you observed this peculiar game known as Pac-Man? \
+    Plato: I have heard of it, Socrates, though I confess I do not fully grasp its essence. \
+    Socrates: It is a game in which a small, ever-hungry being, pursued by ghosts, traverses a maze, consuming pellets for sustenance. \
+    Plato: A curious notion! But tell me, Socrates, what wisdom is to be found in such a pursuit? \
+    Socrates: Ah, my dear Plato, is it not the case that in life we, too, navigate a labyrinth filled with obstacles, ever striving for fulfillment, yet always pursued by unseen forces? \
+    Plato: You suggest that the game is an allegory for the human condition? \
+    Socrates: Indeed. Consider the ghosts, are they not akin to our fears and regrets, which chase us through the corridors of existence? Yet, when Pac-Man finds the mighty Power Pellet, he turns upon his pursuers. Is this not a lesson in courage? That with wisdom and preparation, we may face our fears and render them powerless? \
+    Plato: A compelling thought, Socrates. Yet, the maze itself, does it not resemble my own theory of forms? For within the cave of the game screen, shadows flicker, but the true reality, the ideal Pac-Man, exists beyond it. \
+    Socrates: You imply that what we see on the screen is but an imitation of a higher truth? \
+    Plato: Precisely! The game is but a shadow of the true game, an ideal form where every move is perfect, every strategy divine. \
+    Socrates: And yet, Plato, if the game is but an imitation, does that make the pursuit meaningless? Or is it, rather, a reflection of the soul's journey, ever striving for perfection but constrained by its mortal form? \
+    Plato: I see now, Socrates! Pac-Man is not merely a game, it is philosophy in motion. The wise player, like the philosopher, must understand the patterns of the maze, anticipate the movements of fate, and seize opportunity when it appears. \
+    Socrates: You have grasped it well, my friend. But tell me-shall we now play a round and test our understanding in practice? \
+    Plato: Only if you promise not to engage me in paradoxes while I concentrate! \
+    (They both laugh as they rise, their discourse having brought them to a newfound appreciation of both wisdom and play.) \
     Fin.";
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -175,6 +159,20 @@ impl Ghost {
         }
     }
 
+    fn slow(&self, level: u32) -> bool {
+        match level {
+            0 if tunnel(self.pos) => pct(60),
+            0 if self.edible_duration > 0 => pct(60),
+            0 => pct(25),
+            1..=3 if tunnel(self.pos) => pct(55),
+            1..=3 if self.edible_duration > 0 => pct(50),
+            1..=3 => pct(15),
+            _ if tunnel(self.pos) => pct(50),
+            _ if self.edible_duration > 0 => pct(45),
+            _ => pct(5),
+        }
+    }
+
     fn moves(&self, board: &[char], target: usize) -> (Direction, usize) {
         let (col, row) = index2xy_usize(self.pos);
         let (tcol, trow) = index2xy_usize(target);
@@ -206,7 +204,7 @@ impl Ghost {
                 |&(dst, _, _)| {
                     if self.edible_duration > 0 { dst } else { -dst }
                 },
-            ) // Maximize when edible (flee pacman), minimize otherwise
+            )
             .map(|(_, dir, pos)| (dir, pos))
             .unwrap_or((self.direction, self.pos)) // Default to stay in place if no move is possible - never happens
     }
@@ -315,12 +313,11 @@ impl Game {
     }
 
     fn ghosts_are_edible(&mut self, duration: u128) {
-        self.ghosts
-            .iter_mut()
-            .filter(|g| g.state == GhostState::Outside)
-            .for_each(|g| {
-                g.edible_duration += duration;
-            })
+        for g in self.ghosts.iter_mut() {
+            if g.state == GhostState::Outside {
+                g.edible_duration += duration
+            }
+        }
     }
 
     fn check_player_vs_ghosts(&mut self) -> io::Result<()> {
@@ -358,10 +355,6 @@ impl Game {
             xy2index(WIDTH - 3, 0),
             xy2index(0, 24),
             xy2index(WIDTH - 1, 24),
-            // 0 * WIDTH + 2,
-            // 0 * WIDTH + WIDTH - 3,
-            // 24 * WIDTH + 0,
-            // 24 * WIDTH + WIDTH - 1,
         ];
         // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
         let mut chase_target: [usize; 4] = [self.player.pos; 4];
@@ -369,18 +362,9 @@ impl Game {
         // Blinky - target 4 squares away from pacman
         let (pcol, prow) = index2xy_usize(self.player.pos);
         chase_target[1] = match self.player.moving {
-            Left => {
-                let c: i32 = std::cmp::max(0, pcol as i32 - 4);
-                prow * WIDTH + c as usize
-            }
-            Right => {
-                let c: i32 = std::cmp::min((pcol + 4) as i32, WIDTHM1 as i32);
-                prow * WIDTH + c as usize
-            }
-            Up => {
-                let r: i32 = std::cmp::max(0, prow as i32 - 4);
-                r as usize * WIDTH + pcol
-            }
+            Left => prow * WIDTH + pcol.saturating_sub(4),
+            Right => prow * WIDTH + std::cmp::min(pcol + 4, WIDTHM1),
+            Up => prow.saturating_sub(4) * WIDTH + pcol,
             Down => self.player.pos + 4 * WIDTH,
         };
         // Inky - target average of pacman pos and Blinky
@@ -431,7 +415,7 @@ impl Game {
                     }
                 }
                 GhostState::Outside => {
-                    if slowdown_ghost(g, self.level) {
+                    if g.slow(self.level) {
                         continue;
                     }
                     match (g.edible_duration > 0, period(self.level, self.timecum)) {
