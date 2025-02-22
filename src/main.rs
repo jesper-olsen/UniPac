@@ -818,9 +818,8 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
             1..=3 => 130,
             _ => 120,
         };
-        // faster if power pill eaten
-        if game.ghosts.iter().filter(|g| g.edible_duration > 0).count() > 0 {
-            delta -= 20;
+        if game.ghosts.iter().any(|g| g.edible_duration > 0) {
+            delta -= 20; // faster if power pill eaten
         }
         thread::sleep(time::Duration::from_millis(delta));
 
