@@ -514,7 +514,7 @@ impl Game {
                 draw_message(&format!("{}", bonus), false)?;
                 thread::sleep(time::Duration::from_millis(150));
             }
-            ' ' => (),
+            ' ' | '$' => (),
             _ => return Ok(false),
         }
         self.player.pos = idx;
@@ -748,23 +748,12 @@ fn render_rhs(game: &Game) -> io::Result<()> {
         Err(_) => (0, 0), // panic!
     };
 
-    // rediculous - but here we go
-    let i: u16 = if let Ok(width) = WIDTH.try_into() {
-        if cols > width {
-            0
-        } else {
-            width
-        }
-    } else {
-        u16::MAX
-    };
-
-    let q: u16 = cols - i;
-
+    let marquee_x = 0; // start column
+    let q: u16 = cols - marquee_x;
     let i1: usize = game.mq_idx % MARQUEE.len();
     let t: usize = q as usize + game.mq_idx;
     let i2: usize = t % MARQUEE.len();
-    crossterm::execute!(stdout(), cursor::MoveTo(i, rows - i))?;
+    crossterm::execute!(stdout(), cursor::MoveTo(marquee_x, rows - 1))?;
     if i1 < i2 {
         crossterm::execute!(stdout(), style::PrintStyledContent(MARQUEE[i1..i2].white()))?;
     } else {
