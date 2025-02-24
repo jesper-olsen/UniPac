@@ -69,9 +69,23 @@ static LEVEL1MAP: &str = concat!(
     "############################", // 23
 );
 
+const TUNNEL_LEFT: usize = 11 * WIDTH;
+const TUNNEL_RIGHT: usize = 11 * WIDTH + WIDTH - 1;
+
+fn next_pos(direction: Direction, pos: usize) -> usize {
+    match (direction, pos) {
+        (Right, TUNNEL_RIGHT) => TUNNEL_LEFT,
+        (Right, _) => pos + 1,
+        (Left, TUNNEL_LEFT) => TUNNEL_RIGHT,
+        (Left, _) => pos - 1,
+        (Down, _) => pos + WIDTH,
+        (Up, _) => pos - WIDTH,
+    }
+}
+
 fn tunnel(pos: usize) -> bool {
-    (11 * WIDTH..=11 * WIDTH + 5).contains(&pos)
-        || (11 * WIDTH + 22..=11 * WIDTH + WIDTHM1).contains(&pos)
+    (TUNNEL_LEFT..=TUNNEL_LEFT + 5).contains(&pos)
+        || (TUNNEL_RIGHT - 5..TUNNEL_RIGHT).contains(&pos)
 }
 
 const fn index2xy(i: usize) -> (u16, u16) {
@@ -174,20 +188,12 @@ impl Ghost {
     }
 
     fn moves(&self, board: &[char], target: usize) -> (Direction, usize) {
-        let (col, row) = index2xy_usize(self.pos);
         let (tcol, trow) = index2xy_usize(target);
 
         [Right, Left, Down, Up]
             .into_iter()
             .filter_map(|d| {
-                let p = match (d, col) {
-                    (Right, WIDTHM1) => row * WIDTH, // Tunnel
-                    (Right, _) => self.pos + 1,
-                    (Left, 0) => row * WIDTH + WIDTH - 1, // Tunnel
-                    (Left, _) => self.pos - 1,
-                    (Down, _) => self.pos + WIDTH,
-                    (Up, _) => self.pos - WIDTH,
-                };
+                let p = next_pos(d, self.pos);
 
                 // never go back unless fleeing pacman
                 if matches!(board[p], 'P' | ' ' | '.' | '$')
@@ -437,18 +443,6 @@ impl Game {
         Ok(())
     }
 
-    fn next_player_pos(&self, direction: Direction) -> usize {
-        let col = self.player.pos % WIDTH;
-        match direction {
-            Right if col == WIDTHM1 => self.player.pos - col, // tunnel
-            Right => self.player.pos + 1,
-            Left if col == 0 => self.player.pos + WIDTHM1 - col, // tunnel
-            Left => self.player.pos - 1,
-            Down => self.player.pos + WIDTH,
-            Up => self.player.pos - WIDTH,
-        }
-    }
-
     fn move_player(&mut self, idx: usize) -> io::Result<bool> {
         // move may not be valid - return true if valid
         match self.board[idx] {
@@ -490,11 +484,11 @@ impl Game {
         let prev_score = self.score;
 
         // Try moving in input direction, then fallback to current movement
-        let idx = self.next_player_pos(self.player.last_input_direction);
+        let idx = next_pos(self.player.last_input_direction, self.player.pos);
         match self.move_player(idx)? {
             true => self.player.moving = self.player.last_input_direction,
             false => {
-                let idx = self.next_player_pos(self.player.moving);
+                let idx = next_pos(self.player.moving, self.player.pos);
                 if !self.move_player(idx)? {
                     return Ok(());
                 }
