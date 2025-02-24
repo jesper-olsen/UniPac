@@ -233,7 +233,7 @@ struct Player {
     last_input_direction: Direction,
     moving: Direction,
     anim_frame: usize,
-    timecum: u128,
+    timecum: u128, // for animation
 }
 
 const PLAYER_INIT: Player = Player {
@@ -248,7 +248,7 @@ const PLAYER_INIT: Player = Player {
 struct Game {
     board: [char; LEVEL1MAP.len()],
     mq_idx: usize,
-    timecum: u128,
+    timecum: u128, // time is divided into Chase/Scatter Periods
     dots_left: u32,
     high_score: u32,
     lives: u32,
@@ -262,23 +262,10 @@ struct Game {
     am: AM,
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 enum Period {
     Scatter,
     Chase,
-}
-
-fn period(level: u32, timecum: u128) -> Period {
-    match timecum {
-        0..=6999 => Period::Scatter,
-        7000..=26999 => Period::Chase,
-        27000..=33999 => Period::Scatter,
-        34000..=53999 => Period::Chase,
-        54000..=58999 => Period::Scatter,
-        59000..=78999 if level == 0 => Period::Chase,
-        79000..=83999 if level == 0 => Period::Scatter,
-        _ => Period::Chase,
-    }
 }
 
 impl Game {
@@ -323,6 +310,19 @@ impl Game {
         game
     }
 
+    fn period(&self) -> Period {
+        match self.timecum {
+            0..=6999 => Period::Scatter,
+            7000..=26999 => Period::Chase,
+            27000..=33999 => Period::Scatter,
+            34000..=53999 => Period::Chase,
+            54000..=58999 => Period::Scatter,
+            59000..=78999 if self.level == 0 => Period::Chase,
+            79000..=83999 if self.level == 0 => Period::Scatter,
+            _ => Period::Chase,
+        }
+    }
+
     fn repopulate_board(&mut self) {
         self.board = LEVEL1MAP.chars().collect::<Vec<_>>().try_into().unwrap();
         self.dots_left = self.board.iter().filter(|&c| *c == '.').count() as u32;
@@ -360,9 +360,6 @@ impl Game {
 
     fn update_fruit(&mut self, telaps: u128) {
         self.timecum += telaps;
-        // if self.timecum > 500 {
-        //     self.timecum = 0;
-        // }
         self.fruit_duration = self.fruit_duration.saturating_sub(telaps);
     }
 
@@ -375,7 +372,7 @@ impl Game {
         ];
         // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
         let mut chase_target: [Position; 4] = [self.player.pos; 4];
-        // Pinky - target pacman pos
+        // Pinky - target pacman
         // Blinky - target 4 squares away from pacman
         chase_target[1] = match self.player.moving {
             Left => Position::from_xy(
@@ -401,6 +398,7 @@ impl Game {
             chase_target[3] = SCATTER_TARGET[3]
         }
 
+        let current_period = self.period();
         for (gidx, g) in self.ghosts.iter_mut().enumerate() {
             g.edible_duration = g.edible_duration.saturating_sub(telaps);
             (g.direction, g.pos) = match g.state {
@@ -422,7 +420,6 @@ impl Game {
                         _ => (Right, g.pos.go(Up)),
                     }
                 }
-
                 GhostState::Dead => {
                     const GATE1: Position = Position::from_xy(13, 9);
                     const GATE2: Position = Position::from_xy(14, 9);
@@ -437,12 +434,11 @@ impl Game {
                         _ => g.moves(&self.board, FRONT_OF_GATE1), // go home
                     }
                 }
-
                 GhostState::Outside => {
                     if g.slow(self.level) {
                         continue;
                     }
-                    match (g.edible_duration > 0, period(self.level, self.timecum)) {
+                    match (g.edible_duration > 0, current_period) {
                         (true, _) => g.moves(&self.board, self.player.pos),
                         (false, Period::Chase) => g.moves(&self.board, chase_target[gidx]),
                         (false, Period::Scatter) => g.moves(&self.board, SCATTER_TARGET[gidx]),
@@ -679,7 +675,7 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     //     }
     // }
 
-    let s = if period(game.level, game.timecum) == Period::Chase {
+    let s = if game.period() == Period::Chase {
         "\u{1F4A1}" // light bulb
     } else {
         "  "
