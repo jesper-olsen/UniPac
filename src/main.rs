@@ -17,12 +17,11 @@ use kira::{
 
 const MAX_PACMAN_LIVES: u32 = 6;
 const WIDTH: usize = 28;
-const WIDTHM1: usize = WIDTH - 1;
 const GHOSTS_INIT: [Ghost; 4] = [
-    Ghost::new(10 * WIDTH + 12),
-    Ghost::new(10 * WIDTH + 14),
-    Ghost::new(11 * WIDTH + 12),
-    Ghost::new(11 * WIDTH + 14),
+    Ghost::new(Position::from_xy(12, 10)),
+    Ghost::new(Position::from_xy(14, 10)),
+    Ghost::new(Position::from_xy(12, 11)),
+    Ghost::new(Position::from_xy(14, 11)),
 ];
 
 fn pct(n: u8) -> bool {
@@ -69,37 +68,53 @@ static LEVEL1MAP: &str = concat!(
     "############################", // 23
 );
 
-const TUNNEL_LEFT: usize = 11 * WIDTH;
-const TUNNEL_RIGHT: usize = 11 * WIDTH + WIDTH - 1;
+#[derive(Copy, Clone, PartialEq, Eq)]
+struct Position(usize);
 
-fn next_pos(direction: Direction, pos: usize) -> usize {
-    match (direction, pos) {
-        (Right, TUNNEL_RIGHT) => TUNNEL_LEFT,
-        (Right, _) => pos + 1,
-        (Left, TUNNEL_LEFT) => TUNNEL_RIGHT,
-        (Left, _) => pos - 1,
-        (Down, _) => pos + WIDTH,
-        (Up, _) => pos - WIDTH,
+impl Position {
+    const fn from_xy(col: usize, row: usize) -> Position {
+        Position(row * WIDTH + col)
+    }
+
+    const fn col(&self) -> usize {
+        self.0 % WIDTH
+    }
+
+    const fn row(&self) -> usize {
+        self.0 / WIDTH
+    }
+
+    const fn dist_city(&self, other: Position) -> usize {
+        self.col().abs_diff(other.col()) + self.row().abs_diff(other.row())
+    }
+
+    const fn dist_sqr(&self, other: Position) -> usize {
+        self.col().abs_diff(other.col()).pow(2) + self.row().abs_diff(other.row()).pow(2)
+    }
+
+    const fn average(&self, other: Position) -> Position {
+        Position::from_xy(
+            (self.col() + other.col()) / 2,
+            (self.row() + other.row()) / 2,
+        )
+    }
+
+    const fn go(&self, direction: Direction) -> Position {
+        match direction {
+            Right if self.col() == WIDTH - 1 => Position(self.0 - (WIDTH - 1)),
+            Right => Position(self.0 + 1),
+            Left if self.col() == 0 => Position(self.0 + (WIDTH - 1)),
+            Left => Position(self.0 - 1),
+            Down => Position(self.0 + WIDTH),
+            Up => Position(self.0 - WIDTH),
+        }
     }
 }
 
-fn tunnel(pos: usize) -> bool {
-    (TUNNEL_LEFT..=TUNNEL_LEFT + 5).contains(&pos)
-        || (TUNNEL_RIGHT - 5..TUNNEL_RIGHT).contains(&pos)
-}
-
-const fn index2xy(i: usize) -> (u16, u16) {
-    // crossterm needs u16 coordinates - this version of index2xy is for that
-    let (col, row) = index2xy_usize(i);
-    (col as u16, row as u16)
-}
-
-const fn index2xy_usize(i: usize) -> (usize, usize) {
-    (i % WIDTH, i / WIDTH)
-}
-
-const fn xy2index(col: usize, row: usize) -> usize {
-    row * WIDTH + col
+fn tunnel(pos: Position) -> bool {
+    const TUNNEL_LEFT: usize = 11 * WIDTH;
+    (TUNNEL_LEFT..=TUNNEL_LEFT + 5).contains(&pos.0)
+        || (TUNNEL_LEFT + WIDTH - 1 - 5..TUNNEL_LEFT + WIDTH - 1).contains(&pos.0)
 }
 
 static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man. \
@@ -157,14 +172,14 @@ enum GhostState {
 }
 
 struct Ghost {
-    pos: usize,
+    pos: Position,
     state: GhostState,
     edible_duration: u128,
     direction: Direction,
 }
 
 impl Ghost {
-    const fn new(pos: usize) -> Self {
+    const fn new(pos: Position) -> Self {
         Ghost {
             pos,
             direction: Left,
@@ -187,21 +202,17 @@ impl Ghost {
         }
     }
 
-    fn moves(&self, board: &[char], target: usize) -> (Direction, usize) {
-        let (tcol, trow) = index2xy_usize(target);
-
+    fn moves(&self, board: &[char], target: Position) -> (Direction, Position) {
         [Right, Left, Down, Up]
             .into_iter()
             .filter_map(|d| {
-                let p = next_pos(d, self.pos);
+                let p = self.pos.go(d);
 
                 // never go back unless fleeing pacman
-                if matches!(board[p], 'P' | ' ' | '.' | '$')
+                if matches!(board[p.0], 'P' | ' ' | '.' | '$')
                     && (self.edible_duration > 0 || d != self.direction.opposite())
                 {
-                    let (ncol, nrow) = index2xy_usize(p);
-                    let dst = tcol.abs_diff(ncol) + trow.abs_diff(nrow);
-                    Some((dst as isize, d, p))
+                    Some((target.dist_city(p) as isize, d, p))
                 } else {
                     None
                 }
@@ -217,7 +228,7 @@ impl Ghost {
 }
 
 struct Player {
-    pos: usize,
+    pos: Position,
     dead: bool,
     last_input_direction: Direction,
     moving: Direction,
@@ -226,7 +237,7 @@ struct Player {
 }
 
 const PLAYER_INIT: Player = Player {
-    pos: xy2index(14, 18),
+    pos: Position::from_xy(14, 18),
     dead: false,
     last_input_direction: Left,
     moving: Left,
@@ -356,33 +367,37 @@ impl Game {
     }
 
     fn update_ghosts(&mut self, telaps: u128) {
-        const SCATTER_TARGET: [usize; 4] = [
-            xy2index(2, 0),
-            xy2index(WIDTH - 3, 0),
-            xy2index(0, 24),
-            xy2index(WIDTH - 1, 24),
+        const SCATTER_TARGET: [Position; 4] = [
+            Position::from_xy(2, 0),
+            Position::from_xy(WIDTH - 3, 0),
+            Position::from_xy(0, 24),
+            Position::from_xy(WIDTH - 1, 24),
         ];
         // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
-        let mut chase_target: [usize; 4] = [self.player.pos; 4];
+        let mut chase_target: [Position; 4] = [self.player.pos; 4];
         // Pinky - target pacman pos
         // Blinky - target 4 squares away from pacman
-        let (pcol, prow) = index2xy_usize(self.player.pos);
         chase_target[1] = match self.player.moving {
-            Left => prow * WIDTH + pcol.saturating_sub(4),
-            Right => prow * WIDTH + std::cmp::min(pcol + 4, WIDTHM1),
-            Up => prow.saturating_sub(4) * WIDTH + pcol,
-            Down => self.player.pos + 4 * WIDTH,
+            Left => Position::from_xy(
+                self.player.pos.col().saturating_sub(4),
+                self.player.pos.row(),
+            ),
+            Right => Position::from_xy(
+                std::cmp::min(self.player.pos.col() + 4, WIDTH - 1),
+                self.player.pos.row(),
+            ),
+            Up => Position::from_xy(
+                self.player.pos.col(),
+                self.player.pos.row().saturating_sub(4),
+            ),
+            Down => Position::from_xy(self.player.pos.col(), self.player.pos.row() + 4),
         };
-        // Inky - target average of pacman pos and Blinky
-        let (bcol, brow) = index2xy_usize(self.ghosts[1].pos);
-        let (tcol, trow) = ((pcol + bcol) / 2, (prow + brow) / 2);
 
-        chase_target[2] = trow * WIDTH + tcol;
+        // Inky - target average of pacman pos and Blinky
+        chase_target[2] = self.player.pos.average(self.ghosts[1].pos);
 
         // Clyde - target pacman if less than 8 squares away - otherwise target corner
-        let (bcol, brow) = index2xy_usize(self.ghosts[3].pos);
-        let dist = bcol.abs_diff(pcol).pow(2) + brow.abs_diff(prow).pow(2);
-        if dist >= 64 {
+        if self.player.pos.dist_sqr(self.ghosts[3].pos) >= 64 {
             chase_target[3] = SCATTER_TARGET[3]
         }
 
@@ -390,13 +405,12 @@ impl Game {
             g.edible_duration = g.edible_duration.saturating_sub(telaps);
             (g.direction, g.pos) = match g.state {
                 GhostState::Home => {
-                    let a = [g.pos - 1, g.pos + 1, g.pos - WIDTH, g.pos + WIDTH];
-                    let idx = a[random::<usize>() % a.len()];
-                    match self.board[idx] {
-                        'H' => (Left, idx),
+                    let pos = g.pos.go([Left, Right, Up, Down][random::<usize>() % 4]);
+                    match self.board[pos.0] {
+                        'H' => (Left, pos),
                         '-' => {
                             g.state = GhostState::Gateway;
-                            (Left, idx)
+                            (Left, pos)
                         }
                         _ => (g.direction, g.pos),
                     }
@@ -404,22 +418,26 @@ impl Game {
                 GhostState::Gateway => {
                     g.state = GhostState::Outside;
                     match random::<u8>() % 2 {
-                        0 => (Left, g.pos - WIDTH),
-                        _ => (Right, g.pos - WIDTH),
+                        0 => (Left, g.pos.go(Up)),
+                        _ => (Right, g.pos.go(Up)),
                     }
                 }
 
                 GhostState::Dead => {
-                    // if at house gate - go in
-                    if g.pos == 8 * WIDTH + 13 || g.pos == 8 * WIDTH + 14 {
-                        (Down, g.pos + WIDTH)
-                    } else if g.pos == 9 * WIDTH + 13 || g.pos == 9 * WIDTH + 14 {
-                        g.state = GhostState::Home;
-                        (g.direction, g.pos + WIDTH)
-                    } else {
-                        g.moves(&self.board, 8 * WIDTH + 13)
+                    const GATE1: Position = Position::from_xy(13, 9);
+                    const GATE2: Position = Position::from_xy(14, 9);
+                    const FRONT_OF_GATE1: Position = GATE1.go(Up);
+                    const FRONT_OF_GATE2: Position = GATE2.go(Up);
+                    match g.pos {
+                        FRONT_OF_GATE1 | FRONT_OF_GATE2 => (Down, g.pos.go(Down)),
+                        GATE1 | GATE2 => {
+                            g.state = GhostState::Home;
+                            (g.direction, g.pos.go(Down))
+                        }
+                        _ => g.moves(&self.board, FRONT_OF_GATE1), // go home
                     }
                 }
+
                 GhostState::Outside => {
                     if g.slow(self.level) {
                         continue;
@@ -443,17 +461,17 @@ impl Game {
         Ok(())
     }
 
-    fn move_player(&mut self, idx: usize) -> io::Result<bool> {
+    fn move_player(&mut self, pos: Position) -> io::Result<bool> {
         // move may not be valid - return true if valid
-        match self.board[idx] {
+        match self.board[pos.0] {
             '.' => {
                 self.score += 10;
                 self.dots_left -= 1;
-                self.board[idx] = ' ';
+                self.board[pos.0] = ' ';
             }
             'P' => {
                 self.am.play("Audio/eatpill.ogg".to_string())?;
-                self.board[idx] = ' ';
+                self.board[pos.0] = ' ';
                 self.ghosts_are_edible(self.pill_duration);
                 self.score += 50;
                 self.next_ghost_score = 200;
@@ -470,7 +488,7 @@ impl Game {
             ' ' | '$' => (),
             _ => return Ok(false),
         }
-        self.player.pos = idx;
+        self.player.pos = pos;
         Ok(true)
     }
 
@@ -484,12 +502,10 @@ impl Game {
         let prev_score = self.score;
 
         // Try moving in input direction, then fallback to current movement
-        let idx = next_pos(self.player.last_input_direction, self.player.pos);
-        match self.move_player(idx)? {
+        match self.move_player(self.player.pos.go(self.player.last_input_direction))? {
             true => self.player.moving = self.player.last_input_direction,
             false => {
-                let idx = next_pos(self.player.moving, self.player.pos);
-                if !self.move_player(idx)? {
+                if !self.move_player(self.player.pos.go(self.player.moving))? {
                     return Ok(());
                 }
             }
@@ -549,9 +565,8 @@ fn draw_message(s: &str, blink: bool) -> io::Result<()> {
     stdout().flush()
 }
 
-fn draw_message_at(pos: usize, s: &str) -> io::Result<()> {
-    let (col, row) = index2xy(pos);
-    let col = std::cmp::min(col, WIDTH as u16 - 4);
+fn draw_message_at(pos: Position, s: &str) -> io::Result<()> {
+    let (col, row) = (std::cmp::min(pos.col(), WIDTH - 4) as u16, pos.row() as u16);
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(col, row),
@@ -632,12 +647,11 @@ fn render_game_info() -> io::Result<()> {
 }
 
 fn animate_dead_player(game: &Game) -> io::Result<()> {
-    let (col, row) = index2xy(game.player.pos);
     for ch in "|Vv_.+*X*+. ".chars() {
         draw_board(game, false)?;
         crossterm::queue!(
             stdout(),
-            cursor::MoveTo(col, row),
+            cursor::MoveTo(game.player.pos.col() as u16, game.player.pos.row() as u16),
             style::PrintStyledContent(ch.bold().yellow()),
         )?;
         stdout().flush()?;
@@ -661,8 +675,7 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     //                 (16 + j).try_into().unwrap()
     //             ),
     //             style::PrintStyledContent(pacimg[(j + q) as usize].bold().yellow()),
-    //         )
-    //         .ok();
+    //         )?;
     //     }
     // }
 
@@ -671,26 +684,24 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     } else {
         "  "
     };
-
-    crossterm::queue!(stdout(), cursor::MoveTo(30, 23), style::Print(s)).ok();
+    crossterm::queue!(stdout(), cursor::MoveTo(30, 23), style::Print(s))?;
 
     let i = centered_x("Score : 123456"); // get a pos base on av score digits
     crossterm::queue!(
         stdout(),
-        cursor::MoveTo(i, 5.try_into().unwrap()),
+        cursor::MoveTo(i, 5),
         style::PrintStyledContent(format!("Score  : {}", game.score).bold().white()),
-        cursor::MoveTo(i, 6.try_into().unwrap()),
+        cursor::MoveTo(i, 6),
         style::PrintStyledContent(format!("High   : {}", game.high_score).bold().white()),
-        cursor::MoveTo(i, 8.try_into().unwrap()),
+        cursor::MoveTo(i, 8),
         style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
     )?;
-
-    draw_message_at(25 * WIDTH - 1, level2bonus(game.level).0)?;
+    draw_message_at(Position::from_xy(WIDTH - 1, 24), level2bonus(game.level).0)?;
 
     let s = vec!['\u{1F642}'; game.lives as usize];
     let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
     let s2: String = s.into_iter().chain(s1).collect::<String>();
-    draw_message_at(24 * WIDTH, &s2)?;
+    draw_message_at(Position::from_xy(0, 24), &s2)?;
 
     // scroll marquee
     let (cols, rows) = match terminal::size() {
@@ -726,10 +737,10 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
             _ => " ".white(),
         };
         let s = if bold { s.bold() } else { s };
-        let (col, row) = index2xy(i);
+        let p = Position(i);
         crossterm::queue!(
             stdout(),
-            cursor::MoveTo(col, row),
+            cursor::MoveTo(p.col() as u16, p.row() as u16),
             style::PrintStyledContent(s),
         )?;
     }
@@ -737,8 +748,9 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
         let fruit = level2bonus(game.level).0;
-        if let Some(pos) = game.board.iter().position(|&x| x == '$') {
-            let (col, row) = index2xy(pos);
+        if let Some(i) = game.board.iter().position(|&x| x == '$') {
+            let p = Position(i);
+            let (col, row) = (p.col() as u16, p.row() as u16);
             crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(fruit),)?;
         }
     }
@@ -761,7 +773,7 @@ fn draw_player(game: &Game) -> io::Result<()> {
         Up => ['V', 'V', 'V', 'V', '|', '|'],
         Down => ['^', '^', '^', '^', '|', '|'],
     }[game.player.anim_frame];
-    let (col, row) = index2xy(game.player.pos);
+    let (col, row) = (game.player.pos.col() as u16, game.player.pos.row() as u16);
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(col, row),
@@ -772,7 +784,7 @@ fn draw_player(game: &Game) -> io::Result<()> {
 fn draw_ghosts(game: &Game) -> io::Result<()> {
     //"\u{1F631}".rapid_blink() // looks bad
     for (i, g) in game.ghosts.iter().enumerate() {
-        let s = match (g.state, game.board[g.pos] != 'H', i) {
+        let s = match (g.state, game.board[g.pos.0] != 'H', i) {
             (GhostState::Dead, _, _) => "\u{1F440}", // Eyes
             (_, true, _) if (1..2000).contains(&g.edible_duration) => "\u{1F47D}", // Alien
             (_, true, _) if g.edible_duration > 0 => "\u{1F631}", // Scream
@@ -781,7 +793,7 @@ fn draw_ghosts(game: &Game) -> io::Result<()> {
             (_, _, 2) => "\u{1F47B}",                // Ghost
             (_, _, _) => "\u{1F383}",                // Jack-O-Lantern
         };
-        let (col, row) = index2xy(g.pos);
+        let (col, row) = (g.pos.col() as u16, g.pos.row() as u16);
         crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),)?;
     }
     Ok(())
