@@ -632,10 +632,9 @@ fn render_game_info() -> io::Result<()> {
 }
 
 fn animate_dead_player(game: &Game) -> io::Result<()> {
+    let (col, row) = index2xy(game.player.pos);
     for ch in "|Vv_.+*X*+. ".chars() {
         draw_board(game, false)?;
-
-        let (col, row) = index2xy(game.player.pos);
         crossterm::queue!(
             stdout(),
             cursor::MoveTo(col, row),
