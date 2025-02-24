@@ -550,10 +550,8 @@ fn draw_message(s: &str, blink: bool) -> io::Result<()> {
 }
 
 fn draw_message_at(pos: usize, s: &str) -> io::Result<()> {
-    let (mut col, row) = index2xy(pos);
-    if col > WIDTH as u16 - 4 {
-        col = WIDTH as u16 - 4;
-    }
+    let (col, row) = index2xy(pos);
+    let col = std::cmp::min(col, WIDTH as u16 - 4);
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(col, row),
