@@ -738,11 +738,9 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
         let fruit = level2bonus(game.level).0;
-        for (i, c) in game.board.iter().enumerate() {
-            if *c == '$' {
-                let (col, row) = index2xy(i);
-                crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(fruit),)?;
-            }
+        if let Some(pos) = game.board.iter().position(|&x| x == '$') {
+            let (col, row) = index2xy(pos);
+            crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(fruit),)?;
         }
     }
     Ok(())
