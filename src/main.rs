@@ -53,7 +53,7 @@ static LEVEL1MAP: &str = concat!(
     "     #.##          ##.#     ", //  8
     "     #.## ###--### ##.#     ", //  9
     "######.## # HHHH # ##.######", // 10
-    "      .   # HHHH #   .      ", // 11
+    ";;;;;;.   # HHHH #   .;;;;;;", // 11
     "######.## # HHHH # ##.######", // 12
     "     #.## ######## ##.#     ", // 13
     "     #.##    $     ##.#     ", // 14
@@ -109,12 +109,6 @@ impl Position {
             Up => Position(self.0 - WIDTH),
         }
     }
-}
-
-fn tunnel(pos: Position) -> bool {
-    const TUNNEL_LEFT: usize = 11 * WIDTH;
-    (TUNNEL_LEFT..=TUNNEL_LEFT + 5).contains(&pos.0)
-        || (TUNNEL_LEFT + WIDTH - 1 - 5..TUNNEL_LEFT + WIDTH - 1).contains(&pos.0)
 }
 
 static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man. \
@@ -188,15 +182,15 @@ impl Ghost {
         }
     }
 
-    fn slow(&self, level: u32) -> bool {
+    fn slow(&self, level: u32, in_tunnel: bool) -> bool {
         match level {
-            0 if tunnel(self.pos) => pct(60),
+            0 if in_tunnel => pct(60),
             0 if self.edible_duration > 0 => pct(60),
             0 => pct(25),
-            1..=3 if tunnel(self.pos) => pct(55),
+            1..=3 if in_tunnel => pct(55),
             1..=3 if self.edible_duration > 0 => pct(50),
             1..=3 => pct(15),
-            _ if tunnel(self.pos) => pct(50),
+            _ if in_tunnel => pct(50),
             _ if self.edible_duration > 0 => pct(45),
             _ => pct(5),
         }
@@ -209,7 +203,7 @@ impl Ghost {
                 let p = self.pos.go(d);
 
                 // never go back unless fleeing pacman
-                if matches!(board[p.0], 'P' | ' ' | '.' | '$')
+                if matches!(board[p.0], 'P' | ' ' | '.' | '$' | ';')
                     && (self.edible_duration > 0 || d != self.direction.opposite())
                 {
                     Some((target.dist_city(p) as isize, d, p))
@@ -435,7 +429,7 @@ impl Game {
                     }
                 }
                 GhostState::Outside => {
-                    if g.slow(self.level) {
+                    if g.slow(self.level, self.board[g.pos.0] == ';') {
                         continue;
                     }
                     match (g.edible_duration > 0, current_period) {
@@ -481,7 +475,7 @@ impl Game {
                 draw_message(&format!("{}", bonus), false)?;
                 thread::sleep(time::Duration::from_millis(150));
             }
-            ' ' | '$' => (),
+            ' ' | '$' | ';' => (),
             _ => return Ok(false),
         }
         self.player.pos = pos;
