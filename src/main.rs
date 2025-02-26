@@ -8,6 +8,7 @@ use crossterm::{
 use rand::random;
 use std::collections::HashMap;
 use std::io::{self, Write, stdout};
+use std::ops::{Index, IndexMut};
 use std::{thread, time};
 
 use kira::{
@@ -16,7 +17,6 @@ use kira::{
 };
 
 const MAX_PACMAN_LIVES: u32 = 6;
-const WIDTH: usize = 28;
 const GHOSTS_INIT: [Ghost; 4] = [
     Ghost::new(Position::from_xy(12, 10)),
     Ghost::new(Position::from_xy(14, 10)),
@@ -40,33 +40,6 @@ fn level2bonus(level: u32) -> (&'static str, u32) {
         _ => ("\u{1F511}", 5000),       // key
     }
 }
-
-static LEVEL1MAP: &str = concat!(
-    "############################", //  0
-    "#............##............#", //  1
-    "#.####.#####.##.#####.####.#", //  2
-    "#P####.#####.##.#####.####P#", //  3
-    "#..........................#", //  4
-    "#.####.##.########.##.####.#", //  5
-    "#......##....##....##......#", //  6
-    "######.##### ## #####.######", //  7
-    "     #.##          ##.#     ", //  8
-    "     #.## ###--### ##.#     ", //  9
-    "######.## # HHHH # ##.######", // 10
-    ";;;;;;.   # HHHH #   .;;;;;;", // 11
-    "######.## # HHHH # ##.######", // 12
-    "     #.## ######## ##.#     ", // 13
-    "     #.##    $     ##.#     ", // 14
-    "######.## ######## ##.######", // 15
-    "#............##............#", // 16
-    "#.####.#####.##.#####.####.#", // 17
-    "#P..##................##..P#", // 18
-    "###.##.##.########.##.##.###", // 19
-    "#......##....##....##......#", // 20
-    "#.##########.##.##########.#", // 21
-    "#..........................#", // 22
-    "############################", // 23
-);
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 struct Position(usize);
@@ -196,14 +169,14 @@ impl Ghost {
         }
     }
 
-    fn moves(&self, board: &[char], target: Position) -> (Direction, Position) {
+    fn moves(&self, board: &Board, target: Position) -> (Direction, Position) {
         [Right, Left, Down, Up]
             .into_iter()
             .filter_map(|d| {
                 let p = self.pos.go(d);
 
                 // never go back unless fleeing pacman
-                if matches!(board[p.0], 'P' | ' ' | '.' | '$' | ';')
+                if matches!(board[p], 'P' | ' ' | '.' | '$' | ';')
                     && (self.edible_duration > 0 || d != self.direction.opposite())
                 {
                     Some((target.dist_city(p) as isize, d, p))
@@ -239,8 +212,62 @@ const PLAYER_INIT: Player = Player {
     timecum: 0,
 };
 
+static LEVEL1MAP: [&str; 24] = [
+    "############################", //  0
+    "#............##............#", //  1
+    "#.####.#####.##.#####.####.#", //  2
+    "#P####.#####.##.#####.####P#", //  3
+    "#..........................#", //  4
+    "#.####.##.########.##.####.#", //  5
+    "#......##....##....##......#", //  6
+    "######.##### ## #####.######", //  7
+    "     #.##          ##.#     ", //  8
+    "     #.## ###--### ##.#     ", //  9
+    "######.## # HHHH # ##.######", // 10
+    ";;;;;;.   # HHHH #   .;;;;;;", // 11
+    "######.## # HHHH # ##.######", // 12
+    "     #.## ######## ##.#     ", // 13
+    "     #.##    $     ##.#     ", // 14
+    "######.## ######## ##.######", // 15
+    "#............##............#", // 16
+    "#.####.#####.##.#####.####.#", // 17
+    "#P..##................##..P#", // 18
+    "###.##.##.########.##.##.###", // 19
+    "#......##....##....##......#", // 20
+    "#.##########.##.##########.#", // 21
+    "#..........................#", // 22
+    "############################", // 23
+];
+
+const WIDTH: usize = LEVEL1MAP[0].len();
+const HEIGHT: usize = LEVEL1MAP.len();
+struct Board([char; WIDTH * HEIGHT]);
+
+impl Board {
+    fn new(_level: usize) -> Self {
+        let board_chars: Vec<char> = LEVEL1MAP.iter().flat_map(|&s| s.chars()).collect();
+        let board_array: [char; WIDTH * HEIGHT] =
+            board_chars.try_into().expect("Board size mismatch");
+        Board(board_array)
+    }
+}
+
+impl Index<Position> for Board {
+    type Output = char;
+    fn index(&self, idx: Position) -> &Self::Output {
+        &self.0[idx.0]
+    }
+}
+
+impl IndexMut<Position> for Board {
+    fn index_mut(&mut self, idx: Position) -> &mut Self::Output {
+        &mut self.0[idx.0]
+    }
+}
+
 struct Game {
-    board: [char; LEVEL1MAP.len()],
+    //board: [char; LEVEL1MAP.len()],
+    board: Board,
     mq_idx: usize,
     timecum: u128, // time is divided into Chase/Scatter Periods
     dots_left: u32,
@@ -288,7 +315,7 @@ impl Game {
             ghosts: GHOSTS_INIT,
             pill_duration: 6000,
             level: 0,
-            board: LEVEL1MAP.chars().collect::<Vec<_>>().try_into().unwrap(),
+            board: Board::new(0),
             dots_left: 0,
             high_score: 9710,
             lives: 3,
@@ -318,8 +345,8 @@ impl Game {
     }
 
     fn repopulate_board(&mut self) {
-        self.board = LEVEL1MAP.chars().collect::<Vec<_>>().try_into().unwrap();
-        self.dots_left = self.board.iter().filter(|&c| *c == '.').count() as u32;
+        self.board = Board::new(0);
+        self.dots_left = self.board.0.iter().filter(|&c| *c == '.').count() as u32;
         self.dots_left += 2; // +2 pseudo dots for fruit bonuses
     }
 
@@ -368,20 +395,12 @@ impl Game {
         let mut chase_target: [Position; 4] = [self.player.pos; 4];
         // Pinky - target pacman
         // Blinky - target 4 squares away from pacman
+        let (col, row) = (self.player.pos.col(), self.player.pos.row());
         chase_target[1] = match self.player.moving {
-            Left => Position::from_xy(
-                self.player.pos.col().saturating_sub(4),
-                self.player.pos.row(),
-            ),
-            Right => Position::from_xy(
-                std::cmp::min(self.player.pos.col() + 4, WIDTH - 1),
-                self.player.pos.row(),
-            ),
-            Up => Position::from_xy(
-                self.player.pos.col(),
-                self.player.pos.row().saturating_sub(4),
-            ),
-            Down => Position::from_xy(self.player.pos.col(), self.player.pos.row() + 4),
+            Left => Position::from_xy(col.saturating_sub(4), row),
+            Right => Position::from_xy(std::cmp::min(col + 4, WIDTH - 1), row),
+            Up => Position::from_xy(col, row.saturating_sub(4)),
+            Down => Position::from_xy(col, row + 4),
         };
 
         // Inky - target average of pacman pos and Blinky
@@ -398,7 +417,7 @@ impl Game {
             (g.direction, g.pos) = match g.state {
                 GhostState::Home => {
                     let pos = g.pos.go([Left, Right, Up, Down][random::<usize>() % 4]);
-                    match self.board[pos.0] {
+                    match self.board[pos] {
                         'H' => (Left, pos),
                         '-' => {
                             g.state = GhostState::Gateway;
@@ -429,7 +448,7 @@ impl Game {
                     }
                 }
                 GhostState::Outside => {
-                    if g.slow(self.level, self.board[g.pos.0] == ';') {
+                    if g.slow(self.level, self.board[g.pos] == ';') {
                         continue;
                     }
                     match (g.edible_duration > 0, current_period) {
@@ -453,15 +472,15 @@ impl Game {
 
     fn move_player(&mut self, pos: Position) -> io::Result<bool> {
         // move may not be valid - return true if valid
-        match self.board[pos.0] {
+        match self.board[pos] {
             '.' => {
                 self.score += 10;
                 self.dots_left -= 1;
-                self.board[pos.0] = ' ';
+                self.board[pos] = ' ';
             }
             'P' => {
                 self.am.play("Audio/eatpill.ogg".to_string())?;
-                self.board[pos.0] = ' ';
+                self.board[pos] = ' ';
                 self.ghosts_are_edible(self.pill_duration);
                 self.score += 50;
                 self.next_ghost_score = 200;
@@ -719,7 +738,7 @@ fn render_rhs(game: &Game) -> io::Result<()> {
 }
 
 fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
-    for (i, c) in game.board.iter().enumerate() {
+    for (i, c) in game.board.0.iter().enumerate() {
         let s = match *c {
             '#' => "#".blue(),
             '.' => ".".white(),
@@ -738,7 +757,7 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
         let fruit = level2bonus(game.level).0;
-        if let Some(i) = game.board.iter().position(|&x| x == '$') {
+        if let Some(i) = game.board.0.iter().position(|&x| x == '$') {
             let p = Position(i);
             let (col, row) = (p.col() as u16, p.row() as u16);
             crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(fruit),)?;
@@ -774,7 +793,7 @@ fn draw_player(game: &Game) -> io::Result<()> {
 fn draw_ghosts(game: &Game) -> io::Result<()> {
     //"\u{1F631}".rapid_blink() // looks bad
     for (i, g) in game.ghosts.iter().enumerate() {
-        let s = match (g.state, game.board[g.pos.0] != 'H', i) {
+        let s = match (g.state, game.board[g.pos] != 'H', i) {
             (GhostState::Dead, _, _) => "\u{1F440}", // Eyes
             (_, true, _) if (1..2000).contains(&g.edible_duration) => "\u{1F47D}", // Alien
             (_, true, _) if g.edible_duration > 0 => "\u{1F631}", // Scream
