@@ -8,13 +8,15 @@ use crossterm::{
 use rand::random;
 use std::collections::HashMap;
 use std::io::{self, Write, stdout};
-use std::ops::{Index, IndexMut};
 use std::{thread, time};
 
 use kira::{
     manager::{AudioManager, AudioManagerSettings, backend::cpal::CpalBackend},
     sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
 };
+
+mod board;
+use board::{Board, Direction, Direction::*, HEIGHT, Position, WIDTH};
 
 const MAX_PACMAN_LIVES: u32 = 6;
 const GHOSTS_INIT: [Ghost; 4] = [
@@ -41,49 +43,6 @@ fn level2bonus(level: u32) -> (&'static str, u32) {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
-struct Position(usize);
-
-impl Position {
-    const fn from_xy(col: usize, row: usize) -> Position {
-        Position(row * WIDTH + col)
-    }
-
-    const fn col(&self) -> usize {
-        self.0 % WIDTH
-    }
-
-    const fn row(&self) -> usize {
-        self.0 / WIDTH
-    }
-
-    const fn dist_city(&self, other: Position) -> usize {
-        self.col().abs_diff(other.col()) + self.row().abs_diff(other.row())
-    }
-
-    const fn dist_sqr(&self, other: Position) -> usize {
-        self.col().abs_diff(other.col()).pow(2) + self.row().abs_diff(other.row()).pow(2)
-    }
-
-    const fn average(&self, other: Position) -> Position {
-        Position::from_xy(
-            (self.col() + other.col()) / 2,
-            (self.row() + other.row()) / 2,
-        )
-    }
-
-    const fn go(&self, direction: Direction) -> Position {
-        match direction {
-            Right if self.col() == WIDTH - 1 => Position(self.0 - (WIDTH - 1)),
-            Right => Position(self.0 + 1),
-            Left if self.col() == 0 => Position(self.0 + (WIDTH - 1)),
-            Left => Position(self.0 - 1),
-            Down => Position(self.0 + WIDTH),
-            Up => Position(self.0 - WIDTH),
-        }
-    }
-}
-
 static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man. \
     Scene: A quiet garden in Athens. Plato and Socrates sit on a stone bench, discussing the nature of games. \
     Socrates: Tell me, Plato, have you observed this peculiar game known as Pac-Man? \
@@ -102,27 +61,6 @@ static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man.
     Plato: Only if you promise not to engage me in paradoxes while I concentrate! \
     (They both laugh as they rise, their discourse having brought them to a newfound appreciation of both wisdom and play.) \
     Fin.";
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-use Direction::*;
-
-impl Direction {
-    pub fn opposite(&self) -> Direction {
-        match self {
-            Right => Left,
-            Left => Right,
-            Down => Up,
-            Up => Down,
-        }
-    }
-}
 
 enum GameState {
     UserQuit,
@@ -212,61 +150,7 @@ const PLAYER_INIT: Player = Player {
     timecum: 0,
 };
 
-static LEVEL1MAP: [&str; 24] = [
-    "############################", //  0
-    "#............##............#", //  1
-    "#.####.#####.##.#####.####.#", //  2
-    "#P####.#####.##.#####.####P#", //  3
-    "#..........................#", //  4
-    "#.####.##.########.##.####.#", //  5
-    "#......##....##....##......#", //  6
-    "######.##### ## #####.######", //  7
-    "     #.##          ##.#     ", //  8
-    "     #.## ###--### ##.#     ", //  9
-    "######.## # HHHH # ##.######", // 10
-    ";;;;;;.   # HHHH #   .;;;;;;", // 11
-    "######.## # HHHH # ##.######", // 12
-    "     #.## ######## ##.#     ", // 13
-    "     #.##    $     ##.#     ", // 14
-    "######.## ######## ##.######", // 15
-    "#............##............#", // 16
-    "#.####.#####.##.#####.####.#", // 17
-    "#P..##................##..P#", // 18
-    "###.##.##.########.##.##.###", // 19
-    "#......##....##....##......#", // 20
-    "#.##########.##.##########.#", // 21
-    "#..........................#", // 22
-    "############################", // 23
-];
-
-const WIDTH: usize = LEVEL1MAP[0].len();
-const HEIGHT: usize = LEVEL1MAP.len();
-struct Board([char; WIDTH * HEIGHT]);
-
-impl Board {
-    fn new(_level: usize) -> Self {
-        let board_chars: Vec<char> = LEVEL1MAP.iter().flat_map(|&s| s.chars()).collect();
-        let board_array: [char; WIDTH * HEIGHT] =
-            board_chars.try_into().expect("Board size mismatch");
-        Board(board_array)
-    }
-}
-
-impl Index<Position> for Board {
-    type Output = char;
-    fn index(&self, idx: Position) -> &Self::Output {
-        &self.0[idx.0]
-    }
-}
-
-impl IndexMut<Position> for Board {
-    fn index_mut(&mut self, idx: Position) -> &mut Self::Output {
-        &mut self.0[idx.0]
-    }
-}
-
 struct Game {
-    //board: [char; LEVEL1MAP.len()],
     board: Board,
     mq_idx: usize,
     timecum: u128, // time is divided into Chase/Scatter Periods
@@ -346,7 +230,7 @@ impl Game {
 
     fn repopulate_board(&mut self) {
         self.board = Board::new(0);
-        self.dots_left = self.board.0.iter().filter(|&c| *c == '.').count() as u32;
+        self.dots_left = self.board.dots() as u32;
         self.dots_left += 2; // +2 pseudo dots for fruit bonuses
     }
 
@@ -738,29 +622,38 @@ fn render_rhs(game: &Game) -> io::Result<()> {
 }
 
 fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
-    for (i, c) in game.board.0.iter().enumerate() {
-        let s = match *c {
-            '#' => "#".blue(),
-            '.' => ".".white(),
-            'P' => "*".slow_blink(),
-            _ => " ".white(),
-        };
-        let s = if bold { s.bold() } else { s };
-        let p = Position(i);
-        crossterm::queue!(
-            stdout(),
-            cursor::MoveTo(p.col() as u16, p.row() as u16),
-            style::PrintStyledContent(s),
-        )?;
+    for col in 0..WIDTH {
+        for row in 0..HEIGHT {
+            let p = Position::from_xy(col, row);
+            let s = match game.board[p] {
+                '#' => "#".blue(),
+                '.' => ".".white(),
+                'P' => "*".slow_blink(),
+                _ => " ".white(),
+            };
+            let s = if bold { s.bold() } else { s };
+            crossterm::queue!(
+                stdout(),
+                cursor::MoveTo(col as u16, row as u16),
+                style::PrintStyledContent(s),
+            )?;
+        }
     }
 
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
         let fruit = level2bonus(game.level).0;
-        if let Some(i) = game.board.0.iter().position(|&x| x == '$') {
-            let p = Position(i);
-            let (col, row) = (p.col() as u16, p.row() as u16);
-            crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(fruit),)?;
+        for col in 0..WIDTH {
+            for row in 0..HEIGHT {
+                let p = Position::from_xy(col, row);
+                if game.board[p] == '$' {
+                    crossterm::queue!(
+                        stdout(),
+                        cursor::MoveTo(col as u16, row as u16),
+                        style::Print(fruit),
+                    )?;
+                }
+            }
         }
     }
     Ok(())
