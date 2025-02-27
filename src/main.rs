@@ -447,10 +447,6 @@ fn close_render() -> io::Result<()> {
     terminal::disable_raw_mode()
 }
 
-fn draw_end_game() -> io::Result<()> {
-    draw_message("GAME  OVER", true)
-}
-
 fn draw_message(s: &str, blink: bool) -> io::Result<()> {
     let col: u16 = ((WIDTH - s.len()) / 2).try_into().unwrap();
     let s1 = match blink {
@@ -460,7 +456,8 @@ fn draw_message(s: &str, blink: bool) -> io::Result<()> {
     crossterm::queue!(
         stdout(),
         //cursor::MoveTo(col, 14), // small board
-        cursor::MoveTo(col, 16),
+        cursor::MoveTo(col, 16), // large board
+        //cursor::MoveTo(col, 17), // ms pacman
         style::PrintStyledContent(s1.bold())
     )?;
     stdout().flush()
@@ -667,18 +664,12 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
     }
     if game.fruit_duration > 0 {
         let fruit = level2bonus(game.level).0;
-        for col in 0..WIDTH {
-            for row in 0..HEIGHT {
-                let p = Position::from_xy(col, row);
-                if game.board[p] == '$' {
-                    crossterm::queue!(
-                        stdout(),
-                        cursor::MoveTo(col as u16, row as u16),
-                        style::Print(fruit),
-                    )?;
-                }
-            }
-        }
+        let (col, row) = (game.board.fruit_pos.col(), game.board.fruit_pos.row());
+        crossterm::queue!(
+            stdout(),
+            cursor::MoveTo(col as u16, row as u16),
+            style::Print(fruit),
+        )?;
     }
     Ok(())
 }
@@ -864,7 +855,7 @@ fn main() -> io::Result<()> {
     init_render()?;
     while {
         main_game()?;
-        draw_end_game()?;
+        draw_message("GAME  OVER", true)?;
         another_game()?
     } {}
     close_render()
