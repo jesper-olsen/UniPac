@@ -64,7 +64,39 @@ impl Position {
     }
 }
 
-static LEVEL1MAP: [&str; 24] = [
+static LEVEL1MAP: [&str; 29] = [
+    "############################", //  0
+    "#............##............#", //  1
+    "#.####.#####.##.#####.####.#", //  2
+    "#P####.#####.##.#####.####P#", //  3
+    "#.####.#####.##.#####.####.#", //  4
+    "#..........................#", //  5
+    "#.####.##.########.##.####.#", //  6
+    "#.####.##.########.##.####.#", //  7
+    "#......##....##....##......#", //  8
+    "######.##### ## #####.######", //  9
+    "     #.##          ##.#     ", // 10
+    "     #.## ###--### ##.#     ", // 11
+    "######.## # HHHH # ##.######", // 12
+    ";;;;;;.   # HHHH #   .;;;;;;", // 13
+    "######.## # HHHH # ##.######", // 14
+    "     #.## ######## ##.#     ", // 15
+    "     #.##    $     ##.#     ", // 16
+    "######.## ######## ##.######", // 17
+    "#............##............#", // 18
+    "#.####.#####.##.#####.####.#", // 19
+    "#.####.#####.##.#####.####.#", // 20
+    "#P..##.......p........##..P#", // 21
+    "###.##.##.########.##.##.###", // 22
+    "###.##.##.########.##.##.###", // 23
+    "#......##....##....##......#", // 24
+    "#.##########.##.##########.#", // 25
+    "#.##########.##.##########.#", // 26
+    "#..........................#", // 27
+    "############################", // 28
+];
+
+static LEVEL1MAPc: [&str; 24] = [
     "############################", //  0
     "#............##............#", //  1
     "#.####.#####.##.#####.####.#", //  2
@@ -83,7 +115,7 @@ static LEVEL1MAP: [&str; 24] = [
     "######.## ######## ##.######", // 15
     "#............##............#", // 16
     "#.####.#####.##.#####.####.#", // 17
-    "#P..##................##..P#", // 18
+    "#P..##.......p........##..P#", // 18
     "###.##.##.########.##.##.###", // 19
     "#......##....##....##......#", // 20
     "#.##########.##.##########.#", // 21
@@ -94,30 +126,111 @@ static LEVEL1MAP: [&str; 24] = [
 pub const WIDTH: usize = LEVEL1MAP[0].len();
 pub const HEIGHT: usize = LEVEL1MAP.len();
 
-pub struct Board([char; WIDTH * HEIGHT]);
+pub struct Board {
+    board: [char; WIDTH * HEIGHT],
+    pub gate1: Position,
+    pub gate2: Position,
+    pub front_of_gate1: Position,
+    pub front_of_gate2: Position,
+    pub fruit_pos: Position,
+    pub pacman_start: Position,
+    pub ghost_start: [Position; 4],
+}
 
 impl Board {
-    pub fn new(_level: usize) -> Self {
+    pub fn new(_level: u32) -> Self {
         let board_chars: Vec<char> = LEVEL1MAP.iter().flat_map(|&s| s.chars()).collect();
-        let board_array: [char; WIDTH * HEIGHT] =
-            board_chars.try_into().expect("Board size mismatch");
-        Board(board_array)
+        let board: [char; WIDTH * HEIGHT] = board_chars.try_into().expect("Board size mismatch");
+
+        // board must have:
+        // * two ghost gate positions: '-' (north exit)
+        // * a fruit bonus location: '$'
+        // * a start position for pacman: 'p'
+        let gate1 = Position(
+            board
+                .iter()
+                .position(|c| *c == '-')
+                .expect("no ghost gate on map"),
+        );
+        let gate2 = Position(
+            gate1.0
+                + 1
+                + board[gate1.0 + 1..]
+                    .iter()
+                    .position(|c| *c == '-')
+                    .expect("only one ghost gate on map"),
+        );
+        let fruit_pos = Position(
+            board
+                .iter()
+                .position(|c| *c == '$')
+                .expect("no bonus fruit on map"),
+        );
+
+        let pacman_start = Position(
+            board
+                .iter()
+                .position(|c| *c == 'p')
+                .expect("no start position for pacman"),
+        );
+        let ghost_house: Vec<Position> = board
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| **c == 'H')
+            .map(|(i, _)| Position(i))
+            .collect();
+        let min_col = ghost_house
+            .iter()
+            .map(|p| p.col())
+            .min()
+            .expect("no ghost house");
+        let max_col = ghost_house
+            .iter()
+            .map(|p| p.col())
+            .max()
+            .expect("no ghost house");
+        let min_row = ghost_house
+            .iter()
+            .map(|p| p.row())
+            .min()
+            .expect("no ghost house");
+        let max_row = ghost_house
+            .iter()
+            .map(|p| p.row())
+            .max()
+            .expect("no ghost house");
+        let ghost_start = [
+            Position::from_xy(min_col, min_row),
+            Position::from_xy(max_col, min_row),
+            Position::from_xy(min_col, max_row),
+            Position::from_xy(max_col, max_row),
+        ];
+        Board {
+            board,
+            gate1,
+            gate2,
+            pacman_start,
+            front_of_gate1: gate1.go(Up),
+            front_of_gate2: gate2.go(Up),
+            fruit_pos,
+            ghost_start,
+        }
     }
 
     pub fn dots(&self) -> usize {
-        self.0.iter().filter(|&c| *c == '.').count()
+        self.board.iter().filter(|&c| *c == '.').count()
     }
 }
 
 impl Index<Position> for Board {
     type Output = char;
     fn index(&self, idx: Position) -> &Self::Output {
-        &self.0[idx.0]
+        &self.board[idx.0]
     }
 }
 
 impl IndexMut<Position> for Board {
     fn index_mut(&mut self, idx: Position) -> &mut Self::Output {
-        &mut self.0[idx.0]
+        &mut self.board[idx.0]
     }
 }

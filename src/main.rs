@@ -19,13 +19,6 @@ mod board;
 use board::{Board, Direction, Direction::*, HEIGHT, Position, WIDTH};
 
 const MAX_PACMAN_LIVES: u32 = 6;
-const GHOSTS_INIT: [Ghost; 4] = [
-    Ghost::new(Position::from_xy(12, 10)),
-    Ghost::new(Position::from_xy(14, 10)),
-    Ghost::new(Position::from_xy(12, 11)),
-    Ghost::new(Position::from_xy(14, 11)),
-];
-
 fn pct(n: u8) -> bool {
     random::<u8>() % 100 < n
 }
@@ -76,6 +69,7 @@ enum GhostState {
     Dead,
 }
 
+#[derive(Clone, Copy)]
 struct Ghost {
     pos: Position,
     state: GhostState,
@@ -114,7 +108,7 @@ impl Ghost {
                 let p = self.pos.go(d);
 
                 // never go back unless fleeing pacman
-                if matches!(board[p], 'P' | ' ' | '.' | '$' | ';')
+                if matches!(board[p], 'P' | ' ' | '.' | '$' | ';' | 'p')
                     && (self.edible_duration > 0 || d != self.direction.opposite())
                 {
                     Some((target.dist_city(p) as isize, d, p))
@@ -141,14 +135,18 @@ struct Player {
     timecum: u128, // for animation
 }
 
-const PLAYER_INIT: Player = Player {
-    pos: Position::from_xy(14, 18),
-    dead: false,
-    last_input_direction: Left,
-    moving: Left,
-    anim_frame: 0,
-    timecum: 0,
-};
+impl Player {
+    fn new(board: &Board) -> Player {
+        Player {
+            pos: board.pacman_start,
+            dead: false,
+            last_input_direction: Left,
+            moving: Left,
+            anim_frame: 0,
+            timecum: 0,
+        }
+    }
+}
 
 struct Game {
     board: Board,
@@ -193,26 +191,37 @@ impl Game {
             sounds.insert(s.to_string(), snd);
         }
 
+        let level = 0u32;
+        let board = Board::new(level);
+        let player = Player::new(&board);
         let mut game = Game {
             timecum: 0,
             mq_idx: 0,
-            ghosts: GHOSTS_INIT,
+            ghosts: [Ghost::new(Position::from_xy(0, 0)); 4],
             pill_duration: 6000,
-            level: 0,
-            board: Board::new(0),
+            level,
+            board,
             dots_left: 0,
             high_score: 9710,
             lives: 3,
-            player: PLAYER_INIT,
+            player,
             fruit_duration: 0,
             next_ghost_score: 0,
             score: 0,
             am: AM { manager, sounds },
         };
-
+        game.reset_ghosts();
         game.repopulate_board();
-        game.ghosts = GHOSTS_INIT;
         game
+    }
+
+    fn reset_ghosts(&mut self) {
+        self.ghosts = [
+            Ghost::new(self.board.ghost_start[0]),
+            Ghost::new(self.board.ghost_start[1]),
+            Ghost::new(self.board.ghost_start[2]),
+            Ghost::new(self.board.ghost_start[3]),
+        ];
     }
 
     fn period(&self) -> Period {
@@ -229,7 +238,7 @@ impl Game {
     }
 
     fn repopulate_board(&mut self) {
-        self.board = Board::new(0);
+        self.board = Board::new(self.level);
         self.dots_left = self.board.dots() as u32;
         self.dots_left += 2; // +2 pseudo dots for fruit bonuses
     }
@@ -273,7 +282,7 @@ impl Game {
             Position::from_xy(2, 0),
             Position::from_xy(WIDTH - 3, 0),
             Position::from_xy(0, 24),
-            Position::from_xy(WIDTH - 1, 24),
+            Position::from_xy(WIDTH - 1, HEIGHT),
         ];
         // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
         let mut chase_target: [Position; 4] = [self.player.pos; 4];
@@ -318,17 +327,15 @@ impl Game {
                     }
                 }
                 GhostState::Dead => {
-                    const GATE1: Position = Position::from_xy(13, 9);
-                    const GATE2: Position = Position::from_xy(14, 9);
-                    const FRONT_OF_GATE1: Position = GATE1.go(Up);
-                    const FRONT_OF_GATE2: Position = GATE2.go(Up);
-                    match g.pos {
-                        FRONT_OF_GATE1 | FRONT_OF_GATE2 => (Down, g.pos.go(Down)),
-                        GATE1 | GATE2 => {
-                            g.state = GhostState::Home;
-                            (g.direction, g.pos.go(Down))
-                        }
-                        _ => g.moves(&self.board, FRONT_OF_GATE1), // go home
+                    if g.pos == self.board.gate1 || g.pos == self.board.gate2 {
+                        g.state = GhostState::Home;
+                        (g.direction, g.pos.go(Down))
+                    } else if g.pos == self.board.front_of_gate1
+                        || g.pos == self.board.front_of_gate2
+                    {
+                        (Down, g.pos.go(Down))
+                    } else {
+                        g.moves(&self.board, self.board.front_of_gate1) // go home
                     }
                 }
                 GhostState::Outside => {
@@ -378,7 +385,7 @@ impl Game {
                 draw_message(&format!("{}", bonus), false)?;
                 thread::sleep(time::Duration::from_millis(150));
             }
-            ' ' | '$' | ';' => (),
+            ' ' | '$' | ';' | 'p' => (),
             _ => return Ok(false),
         }
         self.player.pos = pos;
@@ -452,7 +459,8 @@ fn draw_message(s: &str, blink: bool) -> io::Result<()> {
     };
     crossterm::queue!(
         stdout(),
-        cursor::MoveTo(col, 14),
+        //cursor::MoveTo(col, 14), // small board
+        cursor::MoveTo(col, 16),
         style::PrintStyledContent(s1.bold())
     )?;
     stdout().flush()
@@ -577,7 +585,11 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     } else {
         "  "
     };
-    crossterm::queue!(stdout(), cursor::MoveTo(30, 23), style::Print(s))?;
+    crossterm::queue!(
+        stdout(),
+        cursor::MoveTo(WIDTH as u16 + 2, HEIGHT as u16 - 1),
+        style::Print(s)
+    )?;
 
     let i = centered_x("Score : 123456"); // get a pos base on av score digits
     crossterm::queue!(
@@ -589,12 +601,15 @@ fn render_rhs(game: &Game) -> io::Result<()> {
         cursor::MoveTo(i, 8),
         style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
     )?;
-    draw_message_at(Position::from_xy(WIDTH - 1, 24), level2bonus(game.level).0)?;
+    draw_message_at(
+        Position::from_xy(WIDTH - 1, HEIGHT),
+        level2bonus(game.level).0,
+    )?;
 
     let s = vec!['\u{1F642}'; game.lives as usize];
     let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
     let s2: String = s.into_iter().chain(s1).collect::<String>();
-    draw_message_at(Position::from_xy(0, 24), &s2)?;
+    draw_message_at(Position::from_xy(0, HEIGHT), &s2)?;
 
     // scroll marquee
     let (cols, rows) = match terminal::size() {
@@ -641,6 +656,15 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
     }
 
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
+    if game.fruit_duration > 0 {
+        let fruit = level2bonus(game.level).0;
+        let (col, row) = (game.board.fruit_pos.col(), game.board.fruit_pos.row());
+        crossterm::queue!(
+            stdout(),
+            cursor::MoveTo(col as u16, row as u16),
+            style::Print(fruit),
+        )?;
+    }
     if game.fruit_duration > 0 {
         let fruit = level2bonus(game.level).0;
         for col in 0..WIDTH {
@@ -814,8 +838,8 @@ fn main_game() -> io::Result<()> {
                 flash_board(&game)?;
                 game.level += 1;
                 game.repopulate_board();
-                game.ghosts = GHOSTS_INIT;
-                game.player = PLAYER_INIT;
+                game.reset_ghosts();
+                game.player = Player::new(&game.board);
                 game.timecum = 0;
             }
             GameState::LifeLost => {
@@ -829,8 +853,8 @@ fn main_game() -> io::Result<()> {
                 }
                 game.lives -= 1;
                 thread::sleep(time::Duration::from_millis(100));
-                game.ghosts = GHOSTS_INIT;
-                game.player = PLAYER_INIT;
+                game.reset_ghosts();
+                game.player = Player::new(&game.board);
             }
         };
     }
