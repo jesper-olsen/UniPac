@@ -13,7 +13,7 @@ Has most of the game elements from the original game:
 Mazes:
 * Shortened pacman maze (24 rows).
 * Regular pacman maze (29 rows).
-* [Pink and light blue](https://strategywiki.org/wiki/Ms._Pac-Man/Walkthrough) Ms Pacman mazes (31 rows).
+* Pink and dark blue Ms Pacman mazes (31 rows).
 
 Pacman is animated with ascii symbols and the ghosts with unicode codepoints (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
  Unicode has symbols for most of the fruit bonuses (🍒,🍓,🍑,🍎,🍇,🚀,🔔,🔑), but not for the ghosts themselves.
@@ -32,3 +32,4 @@ Credits:
 * Sound assets from Dale Harvey's [JS version](https://github.com/daleharvey/pacman)
 * Marquee text by [ChatGPT](https://chat.openai.com/)
 * [The Pac-Man Dossier](https://pacman.holenet.info)
+* [Ms Pac-Man Walkthrough](https://strategywiki.org/wiki/Ms._Pac-Man/Walkthrough)
