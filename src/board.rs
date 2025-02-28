@@ -64,7 +64,36 @@ impl Position {
     }
 }
 
-static LEVEL1MAP: [&str; 29] = [
+static MAZE_SMALL_PACMAN: [&str; 24] = [
+    "############################", //  0
+    "#............##............#", //  1
+    "#.####.#####.##.#####.####.#", //  2
+    "#P####.#####.##.#####.####P#", //  3
+    "#..........................#", //  4
+    "#.####.##.########.##.####.#", //  5
+    "#......##....##....##......#", //  6
+    "######.##### ## #####.######", //  7
+    "     #.##          ##.#     ", //  8
+    "     #.## ###--### ##.#     ", //  9
+    "######.## # HHHH # ##.######", // 10
+    ";;;;;;.   # HHHH #   .;;;;;;", // 11
+    "######.## # HHHH # ##.######", // 12
+    "     #.## ######## ##.#     ", // 13
+    "     #.##    $     ##.#     ", // 14
+    "######.## ######## ##.######", // 15
+    "#............##............#", // 16
+    "#.####.#####.##.#####.####.#", // 17
+    "#P..##.......p........##..P#", // 18
+    "###.##.##.########.##.##.###", // 19
+    "#......##....##....##......#", // 20
+    "#.##########.##.##########.#", // 21
+    "#..........................#", // 22
+    "############################", // 23
+];
+
+const WIDTH: usize = MAZE_REG_PACMAN[0].len();
+
+static MAZE_REG_PACMAN: [&str; 29] = [
     "############################", //  0
     "#............##............#", //  1
     "#.####.#####.##.#####.####.#", //  2
@@ -96,8 +125,8 @@ static LEVEL1MAP: [&str; 29] = [
     "############################", // 28
 ];
 
-// Ms Pacman Pink
-static LEVEL2MAP: [&str; 31] = [
+//https://strategywiki.org/wiki/Ms._Pac-Man/Walkthrough
+static MAZE_MS_PACMAN_PINK: [&str; 31] = [
     "############################", //  0
     "#......##..........##......#", //  1
     "#P####.##.########.##.####P#", //  2
@@ -131,38 +160,10 @@ static LEVEL2MAP: [&str; 31] = [
     "############################", // 30
 ];
 
-static LEVEL1MAPc: [&str; 24] = [
-    "############################", //  0
-    "#............##............#", //  1
-    "#.####.#####.##.#####.####.#", //  2
-    "#P####.#####.##.#####.####P#", //  3
-    "#..........................#", //  4
-    "#.####.##.########.##.####.#", //  5
-    "#......##....##....##......#", //  6
-    "######.##### ## #####.######", //  7
-    "     #.##          ##.#     ", //  8
-    "     #.## ###--### ##.#     ", //  9
-    "######.## # HHHH # ##.######", // 10
-    ";;;;;;.   # HHHH #   .;;;;;;", // 11
-    "######.## # HHHH # ##.######", // 12
-    "     #.## ######## ##.#     ", // 13
-    "     #.##    $     ##.#     ", // 14
-    "######.## ######## ##.######", // 15
-    "#............##............#", // 16
-    "#.####.#####.##.#####.####.#", // 17
-    "#P..##.......p........##..P#", // 18
-    "###.##.##.########.##.##.###", // 19
-    "#......##....##....##......#", // 20
-    "#.##########.##.##########.#", // 21
-    "#..........................#", // 22
-    "############################", // 23
-];
-
-pub const WIDTH: usize = LEVEL1MAP[0].len();
-pub const HEIGHT: usize = LEVEL1MAP.len();
-
 pub struct Board {
-    board: [char; WIDTH * HEIGHT],
+    board: Vec<char>,
+    pub width: usize,
+    pub height: usize,
     pub gate1: Position,
     pub gate2: Position,
     pub front_of_gate1: Position,
@@ -173,9 +174,20 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new(_level: u32) -> Self {
-        let board_chars: Vec<char> = LEVEL1MAP.iter().flat_map(|&s| s.chars()).collect();
-        let board: [char; WIDTH * HEIGHT] = board_chars.try_into().expect("Board size mismatch");
+    pub fn new(level: u32) -> Self {
+        let board: Vec<char> = match level {
+            0 => MAZE_SMALL_PACMAN.iter().flat_map(|&s| s.chars()).collect(),
+            2 => MAZE_MS_PACMAN_PINK
+                .iter()
+                .flat_map(|&s| s.chars())
+                .collect(),
+            _ => MAZE_REG_PACMAN.iter().flat_map(|&s| s.chars()).collect(),
+        };
+        let width = MAZE_REG_PACMAN[0].len();
+        let height = board.len() / width;
+        if width != WIDTH {
+            panic!("Maze has wrong width {width} - expected {WIDTH}")
+        }
 
         // board must have:
         // * two ghost gate positions: '-' (north exit)
@@ -242,6 +254,8 @@ impl Board {
         ];
         Board {
             board,
+            width,
+            height,
             gate1,
             gate2,
             pacman_start,

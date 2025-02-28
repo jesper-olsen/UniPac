@@ -16,7 +16,7 @@ use kira::{
 };
 
 mod board;
-use board::{Board, Direction, Direction::*, HEIGHT, Position, WIDTH};
+use board::{Board, Direction, Direction::*, Position};
 
 const MAX_PACMAN_LIVES: u32 = 6;
 fn pct(n: u8) -> bool {
@@ -215,6 +215,50 @@ impl Game {
         game
     }
 
+    fn pause(&self) -> io::Result<()> {
+        self.draw_message("PAUSED", false)?;
+        loop {
+            if let Ok(Event::Key(KeyEvent {
+                code: KeyCode::Char(' '),
+                ..
+            })) = read()
+            {
+                return Ok(());
+            }
+        }
+    }
+
+    fn draw_message(&self, s: &str, blink: bool) -> io::Result<()> {
+        let col: u16 = ((self.board.width - s.len()) / 2).try_into().unwrap();
+        let s1 = match blink {
+            true => s.bold().slow_blink(),
+            false => s.bold(),
+        };
+        crossterm::queue!(
+            stdout(),
+            //cursor::MoveTo(col, 14), // small board
+            cursor::MoveTo(col, 16), // large board
+            //cursor::MoveTo(col, 17), // ms pacman
+            cursor::MoveTo(col, self.board.fruit_pos.row() as u16),
+            //
+            style::PrintStyledContent(s1.bold())
+        )?;
+        stdout().flush()
+    }
+
+    fn draw_message_at(&self, pos: Position, s: &str) -> io::Result<()> {
+        let (col, row) = (
+            std::cmp::min(pos.col(), self.board.width - 4) as u16,
+            pos.row() as u16,
+        );
+        crossterm::queue!(
+            stdout(),
+            cursor::MoveTo(col, row),
+            style::PrintStyledContent(s.bold())
+        )?;
+        stdout().flush()
+    }
+
     fn reset_ghosts(&mut self) {
         self.ghosts = [
             Ghost::new(self.board.ghost_start[0]),
@@ -252,22 +296,24 @@ impl Game {
     }
 
     fn check_player_vs_ghosts(&mut self) -> io::Result<()> {
+        let mut points = Vec::new();
         for g in self.ghosts.iter_mut() {
             if g.state != GhostState::Dead && g.pos == self.player.pos {
                 if g.edible_duration == 0 {
                     self.player.dead = true;
                 } else {
-                    self.am.play("Audio/eatghost.ogg".to_string())?;
                     self.score += self.next_ghost_score;
-
-                    draw_message_at(g.pos, &format!("{}", self.next_ghost_score))?;
-                    thread::sleep(time::Duration::from_millis(150));
-
+                    points.push(self.next_ghost_score);
                     self.next_ghost_score *= 2;
                     g.state = GhostState::Dead;
                     g.edible_duration = 0;
                 }
             }
+        }
+        for score in points {
+            self.am.play("Audio/eatghost.ogg".to_string())?;
+            self.draw_message_at(self.player.pos, &format!("{}", score))?;
+            thread::sleep(time::Duration::from_millis(150));
         }
         Ok(())
     }
@@ -278,11 +324,11 @@ impl Game {
     }
 
     fn update_ghosts(&mut self, telaps: u128) {
-        const SCATTER_TARGET: [Position; 4] = [
+        let scatter_target: [Position; 4] = [
             Position::from_xy(2, 0),
-            Position::from_xy(WIDTH - 3, 0),
+            Position::from_xy(self.board.width - 3, 0),
             Position::from_xy(0, 24),
-            Position::from_xy(WIDTH - 1, HEIGHT),
+            Position::from_xy(self.board.width - 1, self.board.height),
         ];
         // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
         let mut chase_target: [Position; 4] = [self.player.pos; 4];
@@ -291,7 +337,7 @@ impl Game {
         let (col, row) = (self.player.pos.col(), self.player.pos.row());
         chase_target[1] = match self.player.moving {
             Left => Position::from_xy(col.saturating_sub(4), row),
-            Right => Position::from_xy(std::cmp::min(col + 4, WIDTH - 1), row),
+            Right => Position::from_xy(std::cmp::min(col + 4, self.board.width - 1), row),
             Up => Position::from_xy(col, row.saturating_sub(4)),
             Down => Position::from_xy(col, row + 4),
         };
@@ -301,7 +347,7 @@ impl Game {
 
         // Clyde - target pacman if less than 8 squares away - otherwise target corner
         if self.player.pos.dist_sqr(self.ghosts[3].pos) >= 64 {
-            chase_target[3] = SCATTER_TARGET[3]
+            chase_target[3] = scatter_target[3]
         }
 
         let current_period = self.period();
@@ -345,7 +391,7 @@ impl Game {
                     match (g.edible_duration > 0, current_period) {
                         (true, _) => g.moves(&self.board, self.player.pos),
                         (false, Period::Chase) => g.moves(&self.board, chase_target[gidx]),
-                        (false, Period::Scatter) => g.moves(&self.board, SCATTER_TARGET[gidx]),
+                        (false, Period::Scatter) => g.moves(&self.board, scatter_target[gidx]),
                     }
                 }
             } // match ghost_state
@@ -382,7 +428,7 @@ impl Game {
                 self.score += bonus;
                 self.fruit_duration = 0;
 
-                draw_message(&format!("{}", bonus), false)?;
+                self.draw_message(&format!("{}", bonus), false)?;
                 thread::sleep(time::Duration::from_millis(150));
             }
             ' ' | '$' | ';' | 'p' => (),
@@ -447,38 +493,6 @@ fn close_render() -> io::Result<()> {
     terminal::disable_raw_mode()
 }
 
-fn draw_message(s: &str, blink: bool) -> io::Result<()> {
-    let col: u16 = ((WIDTH - s.len()) / 2).try_into().unwrap();
-    let s1 = match blink {
-        true => s.bold().slow_blink(),
-        false => s.bold(),
-    };
-    crossterm::queue!(
-        stdout(),
-        //cursor::MoveTo(col, 14), // small board
-        cursor::MoveTo(col, 16), // large board
-        //cursor::MoveTo(col, 17), // ms pacman
-        style::PrintStyledContent(s1.bold())
-    )?;
-    stdout().flush()
-}
-
-fn draw_message_at(pos: Position, s: &str) -> io::Result<()> {
-    let (col, row) = (std::cmp::min(pos.col(), WIDTH - 4) as u16, pos.row() as u16);
-    crossterm::queue!(
-        stdout(),
-        cursor::MoveTo(col, row),
-        style::PrintStyledContent(s.bold())
-    )?;
-    stdout().flush()
-}
-
-fn draw_start_game() -> io::Result<()> {
-    draw_message("READY!", false)?;
-    thread::sleep(time::Duration::from_millis(1000));
-    Ok(())
-}
-
 fn centered_x(s: &str) -> u16 {
     let leftedge: u16 = 32;
     let n: u16 = s.len().try_into().unwrap();
@@ -513,19 +527,6 @@ fn another_game() -> io::Result<bool> {
                 ..
             }) => return Ok(false),
             _ => (),
-        }
-    }
-}
-
-fn pause() -> io::Result<()> {
-    draw_message("PAUSED", false)?;
-    loop {
-        if let Ok(Event::Key(KeyEvent {
-            code: KeyCode::Char(' '),
-            ..
-        })) = read()
-        {
-            return Ok(());
         }
     }
 }
@@ -584,7 +585,7 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     };
     crossterm::queue!(
         stdout(),
-        cursor::MoveTo(WIDTH as u16 + 2, HEIGHT as u16 - 1),
+        cursor::MoveTo(game.board.width as u16 + 2, game.board.height as u16 - 1),
         style::Print(s)
     )?;
 
@@ -598,15 +599,15 @@ fn render_rhs(game: &Game) -> io::Result<()> {
         cursor::MoveTo(i, 8),
         style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
     )?;
-    draw_message_at(
-        Position::from_xy(WIDTH - 1, HEIGHT),
+    game.draw_message_at(
+        Position::from_xy(game.board.width - 1, game.board.height),
         level2bonus(game.level).0,
     )?;
 
     let s = vec!['\u{1F642}'; game.lives as usize];
     let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
     let s2: String = s.into_iter().chain(s1).collect::<String>();
-    draw_message_at(Position::from_xy(0, HEIGHT), &s2)?;
+    game.draw_message_at(Position::from_xy(0, game.board.height), &s2)?;
 
     // scroll marquee
     let (cols, rows) = match terminal::size() {
@@ -634,8 +635,8 @@ fn render_rhs(game: &Game) -> io::Result<()> {
 }
 
 fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
-    for col in 0..WIDTH {
-        for row in 0..HEIGHT {
+    for col in 0..game.board.width {
+        for row in 0..game.board.height {
             let p = Position::from_xy(col, row);
             let s = match game.board[p] {
                 '#' => "#".blue(),
@@ -774,7 +775,7 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
                     code: KeyCode::Char(' '),
                     ..
                 })) => {
-                    pause()?;
+                    game.pause()?;
                     game.player.last_input_direction
                 }
                 _ => game.player.last_input_direction,
@@ -818,10 +819,11 @@ fn main_game() -> io::Result<()> {
     render_game_info()?;
     loop {
         draw_dynamic(&game)?;
-        draw_start_game()?;
-        thread::sleep(time::Duration::from_millis(200));
+        game.draw_message("READY!", false)?;
+        thread::sleep(time::Duration::from_millis(1200));
+
         match game_loop(&mut game)? {
-            GameState::UserQuit => return Ok(()),
+            GameState::UserQuit => break,
             GameState::SheetComplete => {
                 game.am
                     .play("Audio/opening_song.ogg".to_string())
@@ -840,7 +842,7 @@ fn main_game() -> io::Result<()> {
                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                 animate_dead_player(&game)?;
                 if game.lives == 0 {
-                    return Ok(());
+                    break;
                 }
                 game.lives -= 1;
                 thread::sleep(time::Duration::from_millis(100));
@@ -849,13 +851,13 @@ fn main_game() -> io::Result<()> {
             }
         };
     }
+    game.draw_message("GAME  OVER", true)
 }
 
 fn main() -> io::Result<()> {
     init_render()?;
     while {
         main_game()?;
-        draw_message("GAME  OVER", true)?;
         another_game()?
     } {}
     close_render()
