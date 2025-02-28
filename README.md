@@ -10,12 +10,17 @@ Has most of the game elements from the original game:
 * Two 'fruit' bonuses on every level.
 * Cornering.
 
+Mazes:
+* Shortened pacman maze (24 rows).
+* Regular pacman maze (29 rows).
+* [Pink and light blue](https://strategywiki.org/wiki/Ms._Pac-Man/Walkthrough) Ms Pacman mazes (31 rows).
+
 Pacman is animated with ascii symbols and the ghosts with unicode codepoints (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
  Unicode has symbols for most of the fruit bonuses (🍒,🍓,🍑,🍎,🍇,🚀,🔔,🔑), but not for the ghosts themselves.
 
 Controls are on the arrow keys.
 ```
-% cargo run
+% cargo run --release
 ```
 
 ![Game UI](https://raw.githubusercontent.com/jesper-olsen/UniPac/main/Screenshot.png) 

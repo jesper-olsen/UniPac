@@ -160,6 +160,40 @@ static MAZE_MS_PACMAN_PINK: [&str; 31] = [
     "############################", // 30
 ];
 
+static MAZE_MS_PACMAN_BLUE: [&str; 31] = [
+    "############################", //  0
+    "#..........................#", //  1
+    "#.##.####.########.####.##.#", //  2
+    "#P##.####.########.####.##P#", //  3
+    "#.##.####.##....##.####.##.#", //  4
+    "#.##......##.##.##......##.#", //  5
+    "#.####.##.##.##.##.##.####.#", //  6
+    "#.####.##.##.##.##.##.####.#", //  7
+    "#......##....##....##......#", //  8
+    "###.######## ## ########.###", //  9
+    "###.######## ## ########.###", // 10
+    "###....##          ##....###", // 11
+    "### ##.## ###--### ##.## ###", // 12
+    ";;; ##.   # HHHH #   .## ;;;", // 13
+    "######.## # HHHH # ##.######", // 14
+    "######.## ######## ##.######", // 15
+    ";;; ##.##    $     ##.##.;;;", // 16
+    "### ##.##############.##.###", // 17
+    "###....##### ## #####....###", // 18
+    "###.##.##### ## #####.##.###", // 19
+    "###.##....   ##   ....##.###", // 20
+    "###.#####.## ## ##.#####.###", // 21
+    "###.#####.## ## ##.#####.###", // 22
+    "#.........## p  ##.........#", // 23
+    "#.####.##.########.##.####.#", // 24
+    "#.####.##.########.##.####.#", // 25
+    "#.##...##..........##...##.#", // 26
+    "#P##.#######.##.#######.##P#", // 27
+    "#.##.#######.##.#######.##.#", // 28
+    "#..........................#", // 29
+    "############################", // 30
+];
+
 pub struct Board {
     board: Vec<char>,
     pub width: usize,
@@ -168,7 +202,7 @@ pub struct Board {
     pub gate2: Position,
     pub front_of_gate1: Position,
     pub front_of_gate2: Position,
-    pub fruit_pos: Position,
+    pub fruit: Position,
     pub pacman_start: Position,
     pub ghost_start: [Position; 4],
 }
@@ -181,12 +215,17 @@ impl Board {
                 .iter()
                 .flat_map(|&s| s.chars())
                 .collect(),
+            3 => MAZE_MS_PACMAN_BLUE
+                .iter()
+                .flat_map(|&s| s.chars())
+                .collect(),
             _ => MAZE_REG_PACMAN.iter().flat_map(|&s| s.chars()).collect(),
         };
         let width = MAZE_REG_PACMAN[0].len();
+        //let height = MAZE_REG_PACMAN.len();
         let height = board.len() / width;
         if width != WIDTH {
-            panic!("Maze has wrong width {width} - expected {WIDTH}")
+            panic!("Maze has wrong width {width} expected {WIDTH}")
         }
 
         // board must have:
@@ -207,7 +246,7 @@ impl Board {
                     .position(|c| *c == '-')
                     .expect("only one ghost gate on map"),
         );
-        let fruit_pos = Position(
+        let fruit = Position(
             board
                 .iter()
                 .position(|c| *c == '$')
@@ -261,7 +300,7 @@ impl Board {
             pacman_start,
             front_of_gate1: gate1.go(Up),
             front_of_gate2: gate2.go(Up),
-            fruit_pos,
+            fruit,
             ghost_start,
         }
     }

@@ -239,7 +239,7 @@ impl Game {
             //cursor::MoveTo(col, 14), // small board
             cursor::MoveTo(col, 16), // large board
             //cursor::MoveTo(col, 17), // ms pacman
-            cursor::MoveTo(col, self.board.fruit_pos.row() as u16),
+            cursor::MoveTo(col, self.board.fruit.row() as u16),
             //
             style::PrintStyledContent(s1.bold())
         )?;
@@ -656,16 +656,7 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
         let fruit = level2bonus(game.level).0;
-        let (col, row) = (game.board.fruit_pos.col(), game.board.fruit_pos.row());
-        crossterm::queue!(
-            stdout(),
-            cursor::MoveTo(col as u16, row as u16),
-            style::Print(fruit),
-        )?;
-    }
-    if game.fruit_duration > 0 {
-        let fruit = level2bonus(game.level).0;
-        let (col, row) = (game.board.fruit_pos.col(), game.board.fruit_pos.row());
+        let (col, row) = (game.board.fruit.col(), game.board.fruit.row());
         crossterm::queue!(
             stdout(),
             cursor::MoveTo(col as u16, row as u16),
@@ -830,6 +821,8 @@ fn main_game() -> io::Result<()> {
                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                 flash_board(&game)?;
                 game.level += 1;
+                // clear screen - next board may have different height
+                crossterm::queue!(stdout(), terminal::Clear(terminal::ClearType::All),)?;
                 game.repopulate_board();
                 game.reset_ghosts();
                 game.player = Player::new(&game.board);
