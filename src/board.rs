@@ -222,7 +222,6 @@ impl Board {
             _ => MAZE_REG_PACMAN.iter().flat_map(|&s| s.chars()).collect(),
         };
         let width = MAZE_REG_PACMAN[0].len();
-        //let height = MAZE_REG_PACMAN.len();
         let height = board.len() / width;
         if width != WIDTH {
             panic!("Maze has wrong width {width} expected {WIDTH}")
@@ -320,5 +319,17 @@ impl Index<Position> for Board {
 impl IndexMut<Position> for Board {
     fn index_mut(&mut self, idx: Position) -> &mut Self::Output {
         &mut self.board[idx.0]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+
+    #[test]
+    fn test_eval() {
+        for i in 0..4 {
+            let _ = Board::new(i);
+        }
     }
 }
