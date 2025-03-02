@@ -13,7 +13,7 @@ Has most of the game elements from the original game:
 Mazes:
 * Shortened pacman maze (24 rows).
 * Regular pacman maze (29 rows).
-* Pink and dark blue Ms Pacman mazes (31 rows).
+* 4 Ms Pacman mazes (31 rows).
 
 Pacman is animated with ascii symbols and the ghosts with unicode codepoints (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
  Unicode has symbols for most of the fruit bonuses (🍒,🍓,🍑,🍎,🍇,🚀,🔔,🔑), but not for the ghosts themselves.
