@@ -296,24 +296,23 @@ impl Game {
     }
 
     fn check_player_vs_ghosts(&mut self) -> io::Result<()> {
-        let mut points = Vec::new();
-        for g in self.ghosts.iter_mut() {
+        for gidx in 0..self.ghosts.len() {
+            let g = &mut self.ghosts[gidx];
             if g.state != GhostState::Dead && g.pos == self.player.pos {
                 if g.edible_duration == 0 {
                     self.player.dead = true;
+                    break;
                 } else {
-                    self.score += self.next_ghost_score;
-                    points.push(self.next_ghost_score);
+                    let score = self.next_ghost_score;
+                    self.score += score;
                     self.next_ghost_score *= 2;
                     g.state = GhostState::Dead;
                     g.edible_duration = 0;
+                    self.am.play("Audio/eatghost.ogg".to_string())?;
+                    self.draw_message_at(self.player.pos, &format!("{score}"))?;
+                    thread::sleep(time::Duration::from_millis(150));
                 }
             }
-        }
-        for score in points {
-            self.am.play("Audio/eatghost.ogg".to_string())?;
-            self.draw_message_at(self.player.pos, &format!("{}", score))?;
-            thread::sleep(time::Duration::from_millis(150));
         }
         Ok(())
     }
@@ -801,7 +800,7 @@ impl AM {
     fn play(&mut self, name: String) -> Result<StaticSoundHandle, std::io::Error> {
         self.manager
             .play(self.sounds.get(&name).unwrap().clone())
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            .map_err(io::Error::other)
     }
 }
 
@@ -818,7 +817,7 @@ fn main_game() -> io::Result<()> {
             GameState::SheetComplete => {
                 game.am
                     .play("Audio/opening_song.ogg".to_string())
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                    .map_err(io::Error::other)?;
                 flash_board(&game)?;
                 game.level += 1;
                 // clear screen - next board may have different height
@@ -832,7 +831,7 @@ fn main_game() -> io::Result<()> {
                 render_rhs(&game)?;
                 game.am
                     .play("Audio/die.ogg".to_string())
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                    .map_err(io::Error::other)?;
                 animate_dead_player(&game)?;
                 if game.lives == 0 {
                     break;
