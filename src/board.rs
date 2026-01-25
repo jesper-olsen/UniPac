@@ -278,27 +278,16 @@ pub struct Board {
 
 impl Board {
     pub fn new(level: u32) -> Self {
-        let board: Vec<char> = match level {
-            0 => MAZE_SMALL_PACMAN.iter().flat_map(|&s| s.chars()).collect(),
-            2 => MAZE_MS_PACMAN_PINK
-                .iter()
-                .flat_map(|&s| s.chars())
-                .collect(),
-            3 => MAZE_MS_PACMAN_LIGHT_BLUE
-                .iter()
-                .flat_map(|&s| s.chars())
-                .collect(),
-            4 => MAZE_MS_PACMAN_ORANGE
-                .iter()
-                .flat_map(|&s| s.chars())
-                .collect(),
-            5 => MAZE_MS_PACMAN_DARK_BLUE
-                .iter()
-                .flat_map(|&s| s.chars())
-                .collect(),
-            _ => MAZE_REG_PACMAN.iter().flat_map(|&s| s.chars()).collect(),
+        let maze: &[&str] = match level {
+            0 => &MAZE_SMALL_PACMAN,
+            2 => &MAZE_MS_PACMAN_PINK,
+            3 => &MAZE_MS_PACMAN_LIGHT_BLUE,
+            4 => &MAZE_MS_PACMAN_ORANGE,
+            5 => &MAZE_MS_PACMAN_DARK_BLUE,
+            _ => &MAZE_REG_PACMAN,
         };
-        let width = MAZE_REG_PACMAN[0].len();
+        let board: Vec<char> = maze.iter().flat_map(|&s| s.chars()).collect();
+        let width = maze[0].len();
         let height = board.len() / width;
         if width != WIDTH {
             panic!("Maze has wrong width {width} expected {WIDTH}")
