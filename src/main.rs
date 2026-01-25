@@ -739,16 +739,19 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
     loop {
         let start = time::Instant::now();
 
-        // adjust overall speed by level
-        let mut delta = match game.level {
+        // adjust overall speed by level 
+        let base_speed = match game.level {
             0 => 140,
             1..=3 => 130,
             _ => 120,
         };
-        if game.ghosts.iter().any(|g| g.edible_duration > 0) {
-            delta -= 20; // faster if power pill eaten
-        }
-        thread::sleep(time::Duration::from_millis(delta));
+        // faster if power pill eaten
+        let speed_boost = if game.ghosts.iter().any(|g| g.edible_duration > 0) {
+            20        
+        } else {
+            0
+        };
+        thread::sleep(time::Duration::from_millis(base_speed - speed_boost));
 
         if let Ok(true) = poll(time::Duration::from_millis(10)) {
             game.player.last_input_direction = match read() {
