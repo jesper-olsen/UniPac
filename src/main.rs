@@ -608,10 +608,12 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     crossterm::queue!(
         stdout(),
         cursor::MoveTo(i, 5),
+        style::PrintStyledContent(format!("Maze   : {}", game.board.maze_name).bold().white()),
+        cursor::MoveTo(i, 7),
         style::PrintStyledContent(format!("Score  : {}", game.score).bold().white()),
-        cursor::MoveTo(i, 6),
-        style::PrintStyledContent(format!("High   : {}", game.high_score).bold().white()),
         cursor::MoveTo(i, 8),
+        style::PrintStyledContent(format!("High   : {}", game.high_score).bold().white()),
+        cursor::MoveTo(i, 9),
         style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
     )?;
     game.draw_message_at(
@@ -838,6 +840,7 @@ fn main_game() -> io::Result<()> {
                 crossterm::queue!(stdout(), terminal::Clear(terminal::ClearType::All),)?;
                 game.repopulate_board();
                 game.reset_ghosts();
+                render_game_info()?;
                 game.player = Player::new(&game.board);
                 game.timecum = 0;
             }

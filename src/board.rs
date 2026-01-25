@@ -97,6 +97,7 @@ impl Square {
 
 pub struct Board {
     board: Vec<Square>,
+    pub maze_name: &'static str,
     pub width: usize,
     pub height: usize,
     pub gate1: Position,
@@ -110,13 +111,13 @@ pub struct Board {
 
 impl Board {
     pub fn new(level: u32) -> Self {
-        let maze: &[&str] = match level {
-            0 => &MAZE_SMALL_PACMAN,
-            2 => &MAZE_MS_PACMAN_PINK,
-            3 => &MAZE_MS_PACMAN_LIGHT_BLUE,
-            4 => &MAZE_MS_PACMAN_ORANGE,
-            5 => &MAZE_MS_PACMAN_DARK_BLUE,
-            _ => &MAZE_REG_PACMAN,
+        let (maze, maze_name): (&[&str], &str) = match level {
+            0 => (&MAZE_SMALL_PACMAN, "Pacman Small"),
+            2 => (&MAZE_MS_PACMAN_PINK, "Ms. Pacman Pink"),
+            3 => (&MAZE_MS_PACMAN_LIGHT_BLUE, "Ms. Pacman Light Blue"),
+            4 => (&MAZE_MS_PACMAN_ORANGE, "Ms. Pacman Orange"),
+            5 => (&MAZE_MS_PACMAN_DARK_BLUE, "Ms. Pacman Dark Blue"),
+            _ => (&MAZE_REG_PACMAN, "Pacman Regular"),
         };
         let board: Vec<Square> = maze
             .iter()
@@ -193,6 +194,7 @@ impl Board {
         ];
         Board {
             board,
+            maze_name,
             width,
             height,
             gate1,
