@@ -7,7 +7,7 @@ use crossterm::{
 
 use rand::random;
 use std::io::{self, Write, stdout};
-use std::{thread, time};
+use std::{path, thread, time};
 
 use kira::{
     manager::{AudioManager, AudioManagerSettings, backend::cpal::CpalBackend},
@@ -188,12 +188,13 @@ enum Sound {
     OpeningSong,
 }
 
+const AUDIO_DIR: &str = "Audio";
 const AUDIO_FILES: [&str; 5] = [
-    "Audio/die.ogg",
-    "Audio/eatpill.ogg",
-    "Audio/eatghost.ogg",
-    "Audio/extra_lives.ogg",
-    "Audio/opening_song.ogg",
+    "die.ogg",
+    "eatpill.ogg",
+    "eatghost.ogg",
+    "extra_lives.ogg",
+    "opening_song.ogg",
 ];
 
 impl Game {
@@ -201,9 +202,10 @@ impl Game {
         let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
             .expect("Failed to create AM");
 
-        let sounds = AUDIO_FILES.map(|path| {
-            StaticSoundData::from_file(path, StaticSoundSettings::default())
-                .unwrap_or_else(|_| panic!("Failed to load sound: {path}"))
+        let sounds = AUDIO_FILES.map(|audio_file| {
+            let path = path::Path::new(AUDIO_DIR).join(audio_file);
+            StaticSoundData::from_file(&path, StaticSoundSettings::default())
+                .unwrap_or_else(|e| panic!("Failed to load sound: {path:?}: {e}"))
         });
 
         let level = 0u32;
@@ -739,7 +741,7 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
     loop {
         let start = time::Instant::now();
 
-        // adjust overall speed by level 
+        // adjust overall speed by level
         let base_speed = match game.level {
             0 => 140,
             1..=3 => 130,
@@ -747,7 +749,7 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
         };
         // faster if power pill eaten
         let speed_boost = if game.ghosts.iter().any(|g| g.edible_duration > 0) {
-            20        
+            20
         } else {
             0
         };
