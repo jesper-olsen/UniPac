@@ -15,13 +15,15 @@ use kira::{
 };
 
 mod board;
-use board::{Board, Direction, Direction::*, Position};
+mod maze;
+use board::{Board, Direction, Direction::*, Position, Square};
 
 const MAX_PACMAN_LIVES: u32 = 6;
 fn pct(n: u8) -> bool {
     random::<u8>() % 100 < n
 }
 
+// return: fruit symbol & bonus value
 fn level2bonus(level: u32) -> (&'static str, u32) {
     match level {
         0 => ("\u{1F352}", 100),        // cherries
@@ -107,8 +109,15 @@ impl Ghost {
                 let p = self.pos.go(d);
 
                 // never go back unless fleeing pacman
-                if matches!(board[p], 'P' | ' ' | '.' | '$' | ';' | 'p')
-                    && (self.edible_duration > 0 || d != self.direction.opposite())
+                if matches!(
+                    board[p],
+                    Square::Pill
+                        | Square::Empty
+                        | Square::Dot
+                        | Square::Fruit
+                        | Square::Tunnel
+                        | Square::Start
+                ) && (self.edible_duration > 0 || d != self.direction.opposite())
                 {
                     Some((target.dist_city(p) as isize, d, p))
                 } else {
@@ -362,8 +371,8 @@ impl Game {
                 GhostState::Home => {
                     let pos = g.pos.go([Left, Right, Up, Down][random::<usize>() % 4]);
                     match self.board[pos] {
-                        'H' => (Left, pos),
-                        '-' => {
+                        Square::House => (Left, pos),
+                        Square::Gate => {
                             g.state = GhostState::Gateway;
                             (Left, pos)
                         }
@@ -390,7 +399,7 @@ impl Game {
                     }
                 }
                 GhostState::Outside => {
-                    if g.slow(self.level, self.board[g.pos] == ';') {
+                    if g.slow(self.level, self.board[g.pos] == Square::Tunnel) {
                         continue;
                     }
                     match (g.edible_duration > 0, current_period) {
@@ -415,19 +424,19 @@ impl Game {
     fn move_player(&mut self, pos: Position) -> io::Result<bool> {
         // move may not be valid - return true if valid
         match self.board[pos] {
-            '.' => {
+            Square::Dot => {
                 self.score += 10;
                 self.dots_left -= 1;
-                self.board[pos] = ' ';
+                self.board[pos] = Square::Empty;
             }
-            'P' => {
+            Square::Pill => {
                 self.am.play(Sound::EatPill)?;
-                self.board[pos] = ' ';
+                self.board[pos] = Square::Empty;
                 self.ghosts_are_edible(self.pill_duration);
                 self.score += 50;
                 self.next_ghost_score = 200;
             }
-            '$' if self.fruit_duration > 0 => {
+            Square::Fruit if self.fruit_duration > 0 => {
                 self.am.play(Sound::EatPill)?;
                 let bonus = level2bonus(self.level).1;
                 self.score += bonus;
@@ -436,8 +445,9 @@ impl Game {
                 self.draw_message(&format!("{bonus}"), false)?;
                 thread::sleep(time::Duration::from_millis(150));
             }
-            ' ' | '$' | ';' | 'p' => (),
-            _ => return Ok(false),
+            Square::Empty | Square::Fruit | Square::Tunnel | Square::Start => (),
+            //_ => return Ok(false),
+            Square::Wall | Square::Gate | Square::House => return Ok(false),
         }
         self.player.pos = pos;
         Ok(true)
@@ -644,9 +654,9 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
         for row in 0..game.board.height {
             let p = Position::from_xy(col, row);
             let s = match game.board[p] {
-                '#' => "#".blue(),
-                '.' => ".".white(),
-                'P' => "*".slow_blink(),
+                Square::Wall => "#".blue(),
+                Square::Dot => ".".white(),
+                Square::Pill => "*".slow_blink(),
                 _ => " ".white(),
             };
             let s = if bold { s.bold() } else { s };
@@ -698,7 +708,7 @@ fn draw_player(game: &Game) -> io::Result<()> {
 fn draw_ghosts(game: &Game) -> io::Result<()> {
     //"\u{1F631}".rapid_blink() // looks bad
     for (i, g) in game.ghosts.iter().enumerate() {
-        let s = match (g.state, game.board[g.pos] != 'H', i) {
+        let s = match (g.state, game.board[g.pos] != Square::House, i) {
             (GhostState::Dead, _, _) => "\u{1F440}", // Eyes
             (_, true, _) if (1..2000).contains(&g.edible_duration) => "\u{1F47D}", // Alien
             (_, true, _) if g.edible_duration > 0 => "\u{1F631}", // Scream
