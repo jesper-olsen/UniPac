@@ -91,6 +91,7 @@ static MAZE_SMALL_PACMAN: [&str; 24] = [
     "############################", // 23
 ];
 
+// All mazes have the same width. Height varies.
 const WIDTH: usize = MAZE_REG_PACMAN[0].len();
 
 static MAZE_REG_PACMAN: [&str; 29] = [

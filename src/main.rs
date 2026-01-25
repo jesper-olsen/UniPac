@@ -6,7 +6,6 @@ use crossterm::{
 };
 
 use rand::random;
-use std::collections::HashMap;
 use std::io::{self, Write, stdout};
 use std::{thread, time};
 
@@ -171,25 +170,32 @@ enum Period {
     Chase,
 }
 
+#[derive(Copy, Clone, Eq, Hash, PartialEq)]
+enum Sound {
+    Die = 0,
+    EatPill,
+    EatGhost,
+    ExtraLives,
+    OpeningSong,
+}
+
+const AUDIO_FILES: [&str; 5] = [
+    "Audio/die.ogg",
+    "Audio/eatpill.ogg",
+    "Audio/eatghost.ogg",
+    "Audio/extra_lives.ogg",
+    "Audio/opening_song.ogg",
+];
+
 impl Game {
     fn new() -> Self {
         let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
             .expect("Failed to create AM");
 
-        let mut sounds = HashMap::new();
-        for s in [
-            "Audio/die.ogg",
-            "Audio/eatpill.ogg",
-            "Audio/eatghost.ogg",
-            "Audio/extra_lives.ogg",
-            "Audio/opening_song.ogg",
-        ]
-        .iter()
-        {
-            let snd = StaticSoundData::from_file(s, StaticSoundSettings::default())
-                .expect("Failed to load sound");
-            sounds.insert(s.to_string(), snd);
-        }
+        let sounds = AUDIO_FILES.map(|path| {
+            StaticSoundData::from_file(path, StaticSoundSettings::default())
+                .unwrap_or_else(|_| panic!("Failed to load sound: {path}"))
+        });
 
         let level = 0u32;
         let board = Board::new(level);
@@ -308,7 +314,7 @@ impl Game {
                     self.next_ghost_score *= 2;
                     g.state = GhostState::Dead;
                     g.edible_duration = 0;
-                    self.am.play("Audio/eatghost.ogg".to_string())?;
+                    self.am.play(Sound::EatGhost)?;
                     self.draw_message_at(self.player.pos, &format!("{score}"))?;
                     thread::sleep(time::Duration::from_millis(150));
                 }
@@ -415,19 +421,19 @@ impl Game {
                 self.board[pos] = ' ';
             }
             'P' => {
-                self.am.play("Audio/eatpill.ogg".to_string())?;
+                self.am.play(Sound::EatPill)?;
                 self.board[pos] = ' ';
                 self.ghosts_are_edible(self.pill_duration);
                 self.score += 50;
                 self.next_ghost_score = 200;
             }
             '$' if self.fruit_duration > 0 => {
-                self.am.play("Audio/eatpill.ogg".to_string())?;
+                self.am.play(Sound::EatPill)?;
                 let bonus = level2bonus(self.level).1;
                 self.score += bonus;
                 self.fruit_duration = 0;
 
-                self.draw_message(&format!("{}", bonus), false)?;
+                self.draw_message(&format!("{bonus}"), false)?;
                 thread::sleep(time::Duration::from_millis(150));
             }
             ' ' | '$' | ';' | 'p' => (),
@@ -458,7 +464,7 @@ impl Game {
 
         if prev_score < 10000 && self.score >= 10000 && self.lives < MAX_PACMAN_LIVES {
             self.lives += 1;
-            self.am.play("Audio/extra_lives.ogg".to_string())?;
+            self.am.play(Sound::ExtraLives)?;
         }
 
         if self.score > self.high_score {
@@ -793,13 +799,13 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
 
 struct AM {
     manager: AudioManager,
-    sounds: HashMap<String, StaticSoundData>,
+    sounds: [StaticSoundData; AUDIO_FILES.len()],
 }
 
 impl AM {
-    fn play(&mut self, name: String) -> Result<StaticSoundHandle, std::io::Error> {
+    fn play(&mut self, name: Sound) -> Result<StaticSoundHandle, std::io::Error> {
         self.manager
-            .play(self.sounds.get(&name).unwrap().clone())
+            .play(self.sounds[name as usize].clone())
             .map_err(io::Error::other)
     }
 }
@@ -815,9 +821,7 @@ fn main_game() -> io::Result<()> {
         match game_loop(&mut game)? {
             GameState::UserQuit => break,
             GameState::SheetComplete => {
-                game.am
-                    .play("Audio/opening_song.ogg".to_string())
-                    .map_err(io::Error::other)?;
+                game.am.play(Sound::OpeningSong).map_err(io::Error::other)?;
                 flash_board(&game)?;
                 game.level += 1;
                 // clear screen - next board may have different height
@@ -829,9 +833,7 @@ fn main_game() -> io::Result<()> {
             }
             GameState::LifeLost => {
                 render_rhs(&game)?;
-                game.am
-                    .play("Audio/die.ogg".to_string())
-                    .map_err(io::Error::other)?;
+                game.am.play(Sound::Die).map_err(io::Error::other)?;
                 animate_dead_player(&game)?;
                 if game.lives == 0 {
                     break;
