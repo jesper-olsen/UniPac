@@ -867,10 +867,20 @@ fn main_game() -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
+    // make sure crossterm doesn't leave the terminal in a raw state in case of panics
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let _ = close_render();
+        println!("panicked");
+        original_hook(panic_info);
+    }));
+
     init_render()?;
-    while {
+    loop {
         main_game()?;
-        another_game()?
-    } {}
+        if !another_game()? {
+            break;
+        }
+    }
     close_render()
 }
