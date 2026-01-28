@@ -1,6 +1,6 @@
 use crossterm::{
     cursor,
-    event::{Event, KeyCode, KeyEvent, poll, read},
+    event::{Event, KeyCode, poll, read},
     style::{self, Stylize},
     terminal,
 };
@@ -235,12 +235,13 @@ impl Game {
     fn pause(&self) -> io::Result<()> {
         self.draw_message("PAUSED", false)?;
         loop {
-            if let Ok(Event::Key(KeyEvent {
-                code: KeyCode::Char(' '),
-                ..
-            })) = read()
-            {
-                return Ok(());
+            if let Ok(Event::Key(key_event)) = read() {
+                // Filter out Release/Repeat events for Windows compatibility
+                if key_event.kind == crossterm::event::KeyEventKind::Press
+                    && key_event.code == KeyCode::Char(' ')
+                {
+                    return Ok(());
+                }
             }
         }
     }
@@ -253,11 +254,7 @@ impl Game {
         };
         crossterm::queue!(
             stdout(),
-            //cursor::MoveTo(col, 14), // small board
-            cursor::MoveTo(col, 16), // large board
-            //cursor::MoveTo(col, 17), // ms pacman
             cursor::MoveTo(col, self.board.fruit.row() as u16),
-            //
             style::PrintStyledContent(s1.bold())
         )?;
         stdout().flush()
@@ -512,12 +509,12 @@ fn close_render() -> io::Result<()> {
 
 fn centered_x(s: &str) -> u16 {
     let leftedge: u16 = 32;
+    let Ok((cols, _rows)) = terminal::size() else {
+        return leftedge;
+    };
     let n: u16 = s.len().try_into().unwrap();
-
-    match terminal::size() {
-        Ok((cols, _rows)) => (cols - leftedge - n) / 2 + leftedge,
-        Err(_) => leftedge,
-    }
+    let offset = cols.saturating_sub(leftedge).saturating_sub(n) / 2;
+    offset + leftedge
 }
 
 fn another_game() -> io::Result<bool> {
@@ -534,16 +531,15 @@ fn another_game() -> io::Result<bool> {
     stdout().flush()?;
 
     loop {
-        match read()? {
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('y' | 'Y'),
-                ..
-            }) => return Ok(true),
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('n' | 'N'),
-                ..
-            }) => return Ok(false),
-            _ => (),
+        if let Ok(Event::Key(key_event)) = read() {
+            // Filter out Release/Repeat events for Windows compatibility
+            if key_event.kind == crossterm::event::KeyEventKind::Press {
+                match key_event.code {
+                    KeyCode::Char('y' | 'Y') => return Ok(true),
+                    KeyCode::Char('n' | 'N') => return Ok(false),
+                    _ => (),
+                }
+            }
         }
     }
 }
@@ -756,42 +752,26 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
         thread::sleep(time::Duration::from_millis(base_speed - speed_boost));
 
         if let Ok(true) = poll(time::Duration::from_millis(10)) {
-            game.player.last_input_direction = match read() {
-                Ok(Event::Key(KeyEvent {
-                    code: KeyCode::Char('q'),
-                    ..
-                })) => return Ok(GameState::UserQuit),
-                Ok(Event::Key(KeyEvent {
-                    code: KeyCode::Char('v'),
-                    ..
-                })) => {
-                    game.ghosts_are_edible(game.pill_duration); // cheat
-                    game.player.last_input_direction
+            if let Ok(Event::Key(key_event)) = read() {
+                // Filter out Release/Repeat events for Windows compatibility
+                if key_event.kind == crossterm::event::KeyEventKind::Press {
+                    game.player.last_input_direction = match key_event.code {
+                        KeyCode::Char('q') => return Ok(GameState::UserQuit),
+                        KeyCode::Char('v') => {
+                            game.ghosts_are_edible(game.pill_duration); // cheat
+                            game.player.last_input_direction
+                        }
+                        KeyCode::Left => Left,
+                        KeyCode::Right => Right,
+                        KeyCode::Up => Up,
+                        KeyCode::Down => Down,
+                        KeyCode::Char(' ') => {
+                            game.pause()?;
+                            game.player.last_input_direction
+                        }
+                        _ => game.player.last_input_direction,
+                    }
                 }
-
-                Ok(Event::Key(KeyEvent {
-                    code: KeyCode::Left,
-                    ..
-                })) => Left,
-                Ok(Event::Key(KeyEvent {
-                    code: KeyCode::Right,
-                    ..
-                })) => Right,
-                Ok(Event::Key(KeyEvent {
-                    code: KeyCode::Up, ..
-                })) => Up,
-                Ok(Event::Key(KeyEvent {
-                    code: KeyCode::Down,
-                    ..
-                })) => Down,
-                Ok(Event::Key(KeyEvent {
-                    code: KeyCode::Char(' '),
-                    ..
-                })) => {
-                    game.pause()?;
-                    game.player.last_input_direction
-                }
-                _ => game.player.last_input_direction,
             };
         }
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len(); // scroll marquee
