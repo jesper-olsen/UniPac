@@ -306,7 +306,8 @@ impl Game {
 
     fn ghosts_are_edible(&mut self, duration: u128) {
         for g in self.ghosts.iter_mut() {
-            if g.state == GhostState::Outside {
+            if matches!(g.state, GhostState::Outside | GhostState::Gateway) {
+            //if g.state == GhostState::Outside {
                 g.edible_duration += duration
             }
         }
@@ -650,6 +651,7 @@ fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     if i1 < i2 {
         crossterm::queue!(w, style::PrintStyledContent(MARQUEE[i1..i2].white()))?;
     } else {
+        // marquee is assumed to be ascii (1 byte characters) 
         let part1 = &MARQUEE[i1..];
         let part2 = &MARQUEE[0..i2.min(MARQUEE.len())];
         crossterm::queue!(
