@@ -233,7 +233,10 @@ impl Game {
     }
 
     fn pause(&self) -> io::Result<()> {
-        self.draw_message("PAUSED", false)?;
+        {
+            let mut w = io::BufWriter::new(stdout());
+            self.draw_message(&mut w, "PAUSED", false)?;
+        }
         loop {
             if let Ok(Event::Key(key_event)) = read() {
                 // Filter out Release/Repeat events for Windows compatibility
@@ -246,27 +249,27 @@ impl Game {
         }
     }
 
-    fn draw_message(&self, s: &str, blink: bool) -> io::Result<()> {
+    fn draw_message<W: Write>(&self, w: &mut W, s: &str, blink: bool) -> io::Result<()> {
         let col: u16 = ((self.board.width - s.len()) / 2).try_into().unwrap();
         let s1 = match blink {
             true => s.bold().slow_blink(),
             false => s.bold(),
         };
         crossterm::queue!(
-            stdout(),
+            w,
             cursor::MoveTo(col, self.board.fruit.row() as u16),
             style::PrintStyledContent(s1.bold())
         )?;
         stdout().flush()
     }
 
-    fn draw_message_at(&self, pos: Position, s: &str) -> io::Result<()> {
+    fn draw_message_at<W: Write>(&self, w: &mut W, pos: Position, s: &str) -> io::Result<()> {
         let (col, row) = (
             std::cmp::min(pos.col(), self.board.width - 4) as u16,
             pos.row() as u16,
         );
         crossterm::queue!(
-            stdout(),
+            w,
             cursor::MoveTo(col, row),
             style::PrintStyledContent(s.bold())
         )?;
@@ -323,7 +326,10 @@ impl Game {
                     g.state = GhostState::Dead;
                     g.edible_duration = 0;
                     self.am.play(Sound::EatGhost)?;
-                    self.draw_message_at(self.player.pos, &format!("{score}"))?;
+                    {
+                        let mut w = io::BufWriter::new(stdout());
+                        self.draw_message_at(&mut w, self.player.pos, &format!("{score}"))?;
+                    }
                     thread::sleep(time::Duration::from_millis(150));
                 }
             }
@@ -441,11 +447,13 @@ impl Game {
                 self.score += bonus;
                 self.fruit_duration = 0;
 
-                self.draw_message(&format!("{bonus}"), false)?;
+                {
+                    let mut w = io::BufWriter::new(stdout());
+                    self.draw_message(&mut w, &format!("{bonus}"), false)?;
+                }
                 thread::sleep(time::Duration::from_millis(150));
             }
             Square::Empty | Square::Fruit | Square::Tunnel | Square::Start => (),
-            //_ => return Ok(false),
             Square::Wall | Square::Gate | Square::House => return Ok(false),
         }
         self.player.pos = pos;
@@ -560,20 +568,21 @@ fn render_game_info() -> io::Result<()> {
 
 fn animate_dead_player(game: &Game) -> io::Result<()> {
     for ch in "|Vv_.+*X*+. ".chars() {
-        draw_board(game, false)?;
+        let mut w = io::BufWriter::new(stdout());
+        draw_board(&mut w, game, false)?;
         crossterm::queue!(
-            stdout(),
+            w,
             cursor::MoveTo(game.player.pos.col() as u16, game.player.pos.row() as u16),
             style::PrintStyledContent(ch.bold().yellow()),
         )?;
-        stdout().flush()?;
+        w.flush()?;
 
         thread::sleep(time::Duration::from_millis(150));
     }
     Ok(())
 }
 
-fn render_rhs(game: &Game) -> io::Result<()> {
+fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     // draw lives - ascii art, one pacman for each
     // let pacimg = ["/-\\", "|'<", "\\_/", "   ", "   ", "   "];
     // // need to remove the old pacman character in some cases
@@ -597,14 +606,14 @@ fn render_rhs(game: &Game) -> io::Result<()> {
         "  "
     };
     crossterm::queue!(
-        stdout(),
+        w,
         cursor::MoveTo(game.board.width as u16 + 2, game.board.height as u16 - 1),
         style::Print(s)
     )?;
 
     let i = centered_x("Score : 123456"); // get a pos base on av score digits
     crossterm::queue!(
-        stdout(),
+        w,
         cursor::MoveTo(i, 5),
         style::PrintStyledContent(format!("Maze   : {}", game.board.maze_name).bold().white()),
         cursor::MoveTo(i, 7),
@@ -615,6 +624,7 @@ fn render_rhs(game: &Game) -> io::Result<()> {
         style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
     )?;
     game.draw_message_at(
+        w,
         Position::from_xy(game.board.width - 1, game.board.height),
         level2bonus(game.level).0,
     )?;
@@ -622,7 +632,7 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     let s = vec!['\u{1F642}'; game.lives as usize];
     let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
     let s2: String = s.into_iter().chain(s1).collect::<String>();
-    game.draw_message_at(Position::from_xy(0, game.board.height), &s2)?;
+    game.draw_message_at(w, Position::from_xy(0, game.board.height), &s2)?;
 
     // scroll marquee
     let (cols, rows) = match terminal::size() {
@@ -631,25 +641,26 @@ fn render_rhs(game: &Game) -> io::Result<()> {
     };
 
     let marquee_x = 0; // start column
-    let q: u16 = cols - marquee_x;
+    let q: u16 = cols.saturating_sub(1); // Subtract 1 to avoid the "last cell" scroll trigger
     let i1: usize = game.mq_idx % MARQUEE.len();
     let t: usize = q as usize + game.mq_idx;
     let i2: usize = t % MARQUEE.len();
-    crossterm::execute!(stdout(), cursor::MoveTo(marquee_x, rows - 1))?;
+
+    crossterm::queue!(w, cursor::MoveTo(marquee_x, rows - 1))?;
     if i1 < i2 {
-        crossterm::execute!(stdout(), style::PrintStyledContent(MARQUEE[i1..i2].white()))?;
+        crossterm::queue!(w, style::PrintStyledContent(MARQUEE[i1..i2].white()))?;
     } else {
-        crossterm::execute!(
-            stdout(),
-            style::PrintStyledContent(
-                format!("{}{}", &MARQUEE[i1..MARQUEE.len() - 1], &MARQUEE[0..i2]).white()
-            )
-        )?
+        let part1 = &MARQUEE[i1..];
+        let part2 = &MARQUEE[0..i2.min(MARQUEE.len())];
+        crossterm::queue!(
+            w,
+            style::PrintStyledContent(format!("{}{}", part1, part2).white())
+        )?;
     }
     Ok(())
 }
 
-fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
+fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()> {
     for col in 0..game.board.width {
         for row in 0..game.board.height {
             let p = Position::from_xy(col, row);
@@ -661,7 +672,7 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
             };
             let s = if bold { s.bold() } else { s };
             crossterm::queue!(
-                stdout(),
+                w,
                 cursor::MoveTo(col as u16, row as u16),
                 style::PrintStyledContent(s),
             )?;
@@ -683,14 +694,15 @@ fn draw_board(game: &Game, bold: bool) -> io::Result<()> {
 
 fn flash_board(game: &Game) -> io::Result<()> {
     for i in 0..10 {
-        draw_board(game, i % 2 == 0)?;
-        stdout().flush()?;
+        let mut w = io::BufWriter::new(stdout());
+        draw_board(&mut w, game, i % 2 == 0)?;
+        w.flush()?;
         thread::sleep(time::Duration::from_millis(300));
     }
     Ok(())
 }
 
-fn draw_player(game: &Game) -> io::Result<()> {
+fn draw_player<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     let ch = match game.player.last_input_direction {
         Left => ['}', ')', '>', '-', '>', ')'],
         Right => ['{', '(', '<', '-', '<', '('],
@@ -699,13 +711,13 @@ fn draw_player(game: &Game) -> io::Result<()> {
     }[game.player.anim_frame];
     let (col, row) = (game.player.pos.col() as u16, game.player.pos.row() as u16);
     crossterm::queue!(
-        stdout(),
+        w,
         cursor::MoveTo(col, row),
         style::PrintStyledContent(ch.bold().yellow()),
     )
 }
 
-fn draw_ghosts(game: &Game) -> io::Result<()> {
+fn draw_ghosts<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     //"\u{1F631}".rapid_blink() // looks bad
     for (i, g) in game.ghosts.iter().enumerate() {
         let s = match (g.state, game.board[g.pos] != Square::House, i) {
@@ -718,7 +730,7 @@ fn draw_ghosts(game: &Game) -> io::Result<()> {
             (_, _, _) => "\u{1F383}",                // Jack-O-Lantern
         };
         let (col, row) = (g.pos.col() as u16, g.pos.row() as u16);
-        crossterm::queue!(stdout(), cursor::MoveTo(col, row), style::Print(s),)?;
+        crossterm::queue!(w, cursor::MoveTo(col, row), style::Print(s),)?;
     }
     Ok(())
 }
@@ -726,11 +738,12 @@ fn draw_ghosts(game: &Game) -> io::Result<()> {
 //  The animated death and flashing screen happen syncronously. To be done
 //  correctly, they should be pseudo-event driven like the rest of the program.
 fn draw_dynamic(game: &Game) -> io::Result<()> {
-    draw_board(game, false)?;
-    draw_player(game)?;
-    draw_ghosts(game)?;
-    render_rhs(game)?;
-    stdout().flush()
+    let mut w = io::BufWriter::new(stdout());
+    draw_board(&mut w, game, false)?;
+    draw_player(&mut w, game)?;
+    draw_ghosts(&mut w, game)?;
+    render_rhs(&mut w, game)?;
+    w.flush()
 }
 
 fn game_loop(game: &mut Game) -> io::Result<GameState> {
@@ -812,7 +825,10 @@ fn main_game() -> io::Result<()> {
     render_game_info()?;
     loop {
         draw_dynamic(&game)?;
-        game.draw_message("READY!", false)?;
+        {
+            let mut w = io::BufWriter::new(stdout());
+            game.draw_message(&mut w, "READY!", false)?;
+        }
         thread::sleep(time::Duration::from_millis(1200));
 
         match game_loop(&mut game)? {
@@ -830,7 +846,9 @@ fn main_game() -> io::Result<()> {
                 game.timecum = 0;
             }
             GameState::LifeLost => {
-                render_rhs(&game)?;
+                let mut w = io::BufWriter::new(stdout());
+                render_rhs(&mut w, &game)?;
+                w.flush()?;
                 game.am.play(Sound::Die).map_err(io::Error::other)?;
                 animate_dead_player(&game)?;
                 if game.lives == 0 {
@@ -843,7 +861,10 @@ fn main_game() -> io::Result<()> {
             }
         };
     }
-    game.draw_message("GAME  OVER", true)
+    {
+        let mut w = io::BufWriter::new(stdout());
+        game.draw_message(&mut w, "GAME  OVER", true)
+    }
 }
 
 fn main() -> io::Result<()> {
