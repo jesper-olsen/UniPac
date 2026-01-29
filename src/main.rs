@@ -307,7 +307,6 @@ impl Game {
     fn ghosts_are_edible(&mut self, duration: u128) {
         for g in self.ghosts.iter_mut() {
             if matches!(g.state, GhostState::Outside | GhostState::Gateway) {
-            //if g.state == GhostState::Outside {
                 g.edible_duration += duration
             }
         }
@@ -686,7 +685,7 @@ fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()> {
         let fruit = level2bonus(game.level).0;
         let (col, row) = (game.board.fruit.col(), game.board.fruit.row());
         crossterm::queue!(
-            stdout(),
+            w,
             cursor::MoveTo(col as u16, row as u16),
             style::Print(fruit),
         )?;

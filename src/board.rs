@@ -78,19 +78,21 @@ pub enum Square {
     Tunnel,
 }
 
-impl Square {
-    pub fn from_char(ch: char) -> Square {
+impl TryFrom<char> for Square {
+    type Error = String;
+
+    fn try_from(ch: char) -> Result<Self, Self::Error> {
         match ch {
-            ' ' => Square::Empty,
-            '.' => Square::Dot,
-            'P' => Square::Pill,
-            '$' => Square::Fruit,
-            'p' => Square::Start,
-            '#' => Square::Wall,
-            '-' => Square::Gate,
-            'H' => Square::House,
-            ';' => Square::Tunnel,
-            _ => panic!("not a valid maze symbol: {ch}"),
+            ' ' => Ok(Square::Empty),
+            '.' => Ok(Square::Dot),
+            'P' => Ok(Square::Pill),
+            '$' => Ok(Square::Fruit),
+            'p' => Ok(Square::Start),
+            '#' => Ok(Square::Wall),
+            '-' => Ok(Square::Gate),
+            'H' => Ok(Square::House),
+            ';' => Ok(Square::Tunnel),
+            _ => Err(format!("Invalid maze symbol: {ch}")),
         }
     }
 }
@@ -119,10 +121,17 @@ impl Board {
             5 => (&MAZE_MS_PACMAN_DARK_BLUE, "Ms. Pacman Dark Blue"),
             _ => (&MAZE_REG_PACMAN, "Pacman Regular"),
         };
+        //let board: Vec<Square> = maze
+        //    .iter()
+        //    .flat_map(|&row| row.chars().map(Square::from_char))
+        //    .collect();
         let board: Vec<Square> = maze
             .iter()
-            .flat_map(|&row| row.chars().map(Square::from_char))
-            .collect();
+            .flat_map(|&row| row.chars())
+            .map(Square::try_from) 
+            .collect::<Result<Vec<Square>, String>>() 
+            .expect("Maze initialization failed"); 
+
         let width = maze[0].len();
         let height = board.len() / width;
         if width != WIDTH {
