@@ -67,7 +67,7 @@ pub fn draw_message_at<W: Write>(w: &mut W, game: &Game, pos: Position, s: &str)
         cursor::MoveTo(col, row),
         style::PrintStyledContent(s.bold())
     )?;
-    stdout().flush()
+    w.flush()
 }
 
 //  The animated death and flashing screen happen syncronously. To be done
@@ -301,7 +301,7 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         let part2 = &MARQUEE[0..i2.min(MARQUEE.len())];
         crossterm::queue!(
             w,
-            style::PrintStyledContent(format!("{}{}", part1, part2).white())
+            style::PrintStyledContent(format!("{part1}{part2}").white())
         )?;
     }
     Ok(())
