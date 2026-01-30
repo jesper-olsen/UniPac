@@ -89,6 +89,7 @@ pub fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()
                 Square::Wall => "#".blue(),
                 Square::Dot => ".".white(),
                 Square::Pill => "*".slow_blink(),
+                Square::Fruit if game.fruit_duration>0 => continue,
                 _ => " ".white(),
             };
             let s = if bold { s.bold() } else { s };
@@ -279,12 +280,12 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
     let s2: String = s.into_iter().chain(s1).collect::<String>();
     draw_message_at(w, game, Position::from_xy(0, game.board.height), &s2)?;
+    draw_marquee(w, game)
+}
 
+fn draw_marquee<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     // scroll marquee
-    let (cols, rows) = match terminal::size() {
-        Ok((cols, rows)) => (cols, rows),
-        Err(_) => (0, 0), // panic!
-    };
+    let (cols, rows) = terminal::size().unwrap_or((80, 24));
 
     let marquee_x = 0; // start column
     let q: u16 = cols.saturating_sub(1); // Subtract 1 to avoid the "last cell" scroll trigger
@@ -294,7 +295,7 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
 
     crossterm::queue!(w, cursor::MoveTo(marquee_x, rows - 1))?;
     if i1 < i2 {
-        crossterm::queue!(w, style::PrintStyledContent(MARQUEE[i1..i2].white()))?;
+        crossterm::queue!(w, style::PrintStyledContent(MARQUEE[i1..i2].white()))
     } else {
         // marquee is assumed to be ascii (1 byte characters)
         let part1 = &MARQUEE[i1..];
@@ -302,9 +303,8 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         crossterm::queue!(
             w,
             style::PrintStyledContent(format!("{part1}{part2}").white())
-        )?;
+        )
     }
-    Ok(())
 }
 
 pub fn flash_board(game: &Game) -> io::Result<()> {
