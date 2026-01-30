@@ -7,15 +7,12 @@ use crossterm::{
 
 use rand::random;
 use std::io::{self, Write, stdout};
-use std::{path, thread, time};
+use std::{thread, time};
 
-use kira::{
-    manager::{AudioManager, AudioManagerSettings, backend::cpal::CpalBackend},
-    sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
-};
-
+mod audio;
 mod board;
 mod maze;
+use audio::{AM, Sound};
 use board::{Board, Direction, Direction::*, Position, Square};
 
 const MAX_PACMAN_LIVES: u32 = 6;
@@ -179,35 +176,8 @@ enum Period {
     Chase,
 }
 
-#[derive(Copy, Clone, Eq, Hash, PartialEq)]
-enum Sound {
-    Die = 0,
-    EatPill,
-    EatGhost,
-    ExtraLives,
-    OpeningSong,
-}
-
-const AUDIO_DIR: &str = "Audio";
-const AUDIO_FILES: [&str; 5] = [
-    "die.ogg",
-    "eatpill.ogg",
-    "eatghost.ogg",
-    "extra_lives.ogg",
-    "opening_song.ogg",
-];
-
 impl Game {
     fn new() -> Self {
-        let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
-            .expect("Failed to create AM");
-
-        let sounds = AUDIO_FILES.map(|audio_file| {
-            let path = path::Path::new(AUDIO_DIR).join(audio_file);
-            StaticSoundData::from_file(&path, StaticSoundSettings::default())
-                .unwrap_or_else(|e| panic!("Failed to load sound: {path:?}: {e}"))
-        });
-
         let level = 0u32;
         let board = Board::new(level);
         let player = Player::new(&board);
@@ -225,7 +195,7 @@ impl Game {
             fruit_duration: 0,
             next_ghost_score: 0,
             score: 0,
-            am: AM { manager, sounds },
+            am: AM::default(),
         };
         game.reset_ghosts();
         game.repopulate_board();
@@ -650,7 +620,7 @@ fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     if i1 < i2 {
         crossterm::queue!(w, style::PrintStyledContent(MARQUEE[i1..i2].white()))?;
     } else {
-        // marquee is assumed to be ascii (1 byte characters) 
+        // marquee is assumed to be ascii (1 byte characters)
         let part1 = &MARQUEE[i1..];
         let part2 = &MARQUEE[0..i2.min(MARQUEE.len())];
         crossterm::queue!(
@@ -765,28 +735,28 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
         };
         thread::sleep(time::Duration::from_millis(base_speed - speed_boost));
 
-        if let Ok(true) = poll(time::Duration::from_millis(10)) {
-            if let Ok(Event::Key(key_event)) = read() {
-                // Filter out Release/Repeat events for Windows compatibility
-                if key_event.kind == crossterm::event::KeyEventKind::Press {
-                    game.player.last_input_direction = match key_event.code {
-                        KeyCode::Char('q') => return Ok(GameState::UserQuit),
-                        KeyCode::Char('v') => {
-                            game.ghosts_are_edible(game.pill_duration); // cheat
-                            game.player.last_input_direction
-                        }
-                        KeyCode::Left => Left,
-                        KeyCode::Right => Right,
-                        KeyCode::Up => Up,
-                        KeyCode::Down => Down,
-                        KeyCode::Char(' ') => {
-                            game.pause()?;
-                            game.player.last_input_direction
-                        }
-                        _ => game.player.last_input_direction,
+        if let Ok(true) = poll(time::Duration::from_millis(10))
+            && let Ok(Event::Key(key_event)) = read()
+        {
+            // Filter out Release/Repeat events for Windows compatibility
+            if key_event.kind == crossterm::event::KeyEventKind::Press {
+                game.player.last_input_direction = match key_event.code {
+                    KeyCode::Char('q') => return Ok(GameState::UserQuit),
+                    KeyCode::Char('v') => {
+                        game.ghosts_are_edible(game.pill_duration); // cheat
+                        game.player.last_input_direction
                     }
+                    KeyCode::Left => Left,
+                    KeyCode::Right => Right,
+                    KeyCode::Up => Up,
+                    KeyCode::Down => Down,
+                    KeyCode::Char(' ') => {
+                        game.pause()?;
+                        game.player.last_input_direction
+                    }
+                    _ => game.player.last_input_direction,
                 }
-            };
+            }
         }
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len(); // scroll marquee
 
@@ -805,19 +775,6 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
             }
             _ => (),
         }
-    }
-}
-
-struct AM {
-    manager: AudioManager,
-    sounds: [StaticSoundData; AUDIO_FILES.len()],
-}
-
-impl AM {
-    fn play(&mut self, name: Sound) -> Result<StaticSoundHandle, std::io::Error> {
-        self.manager
-            .play(self.sounds[name as usize].clone())
-            .map_err(io::Error::other)
     }
 }
 

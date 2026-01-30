@@ -128,9 +128,9 @@ impl Board {
         let board: Vec<Square> = maze
             .iter()
             .flat_map(|&row| row.chars())
-            .map(Square::try_from) 
-            .collect::<Result<Vec<Square>, String>>() 
-            .expect("Maze initialization failed"); 
+            .map(Square::try_from)
+            .collect::<Result<Vec<Square>, String>>()
+            .expect("Maze initialization failed");
 
         let width = maze[0].len();
         let height = board.len() / width;
