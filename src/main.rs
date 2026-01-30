@@ -20,20 +20,6 @@ fn pct(n: u8) -> bool {
     random::<u8>() % 100 < n
 }
 
-// return: fruit symbol & bonus value
-fn level2bonus(level: u32) -> (&'static str, u32) {
-    match level {
-        0 => ("\u{1F352}", 100),        // cherries
-        1 => ("\u{1F353}", 300),        // strawberry
-        2 | 3 => ("\u{1F351}", 500),    // peach
-        4 | 5 => ("\u{1F34E}", 700),    // red apple
-        6 | 7 => ("\u{1F347}", 1000),   // grapes
-        8 | 9 => ("\u{1F680}", 2000),   // rocket ship (Galaxian)
-        10 | 11 => ("\u{1F514}", 3000), // bell
-        _ => ("\u{1F511}", 5000),       // key
-    }
-}
-
 static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man. \
     Scene: A quiet garden in Athens. Plato and Socrates sit on a stone bench, discussing the nature of games. \
     Socrates: Tell me, Plato, have you observed this peculiar game known as Pac-Man? \
@@ -216,6 +202,20 @@ impl Game {
                     return Ok(());
                 }
             }
+        }
+    }
+
+    // return: fruit symbol & bonus value
+    fn bonus(&self) -> (&'static str, u32) {
+        match self.level {
+            0 => ("\u{1F352}", 100),        // cherries
+            1 => ("\u{1F353}", 300),        // strawberry
+            2 | 3 => ("\u{1F351}", 500),    // peach
+            4 | 5 => ("\u{1F34E}", 700),    // red apple
+            6 | 7 => ("\u{1F347}", 1000),   // grapes
+            8 | 9 => ("\u{1F680}", 2000),   // rocket ship (Galaxian)
+            10 | 11 => ("\u{1F514}", 3000), // bell
+            _ => ("\u{1F511}", 5000),       // key
         }
     }
 
@@ -413,7 +413,7 @@ impl Game {
             }
             Square::Fruit if self.fruit_duration > 0 => {
                 self.am.play(Sound::EatPill)?;
-                let bonus = level2bonus(self.level).1;
+                let bonus = self.bonus().1;
                 self.score += bonus;
                 self.fruit_duration = 0;
 
@@ -596,7 +596,7 @@ fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     game.draw_message_at(
         w,
         Position::from_xy(game.board.width - 1, game.board.height),
-        level2bonus(game.level).0,
+        game.bonus().0,
     )?;
 
     let s = vec!['\u{1F642}'; game.lives as usize];
@@ -652,7 +652,7 @@ fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()> {
 
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
-        let fruit = level2bonus(game.level).0;
+        let fruit = game.bonus().0;
         let (col, row) = (game.board.fruit.col(), game.board.fruit.row());
         crossterm::queue!(
             w,
