@@ -169,32 +169,22 @@ impl Board {
                 .position(|c| *c == Square::Start)
                 .expect("no start position for pacman"),
         );
-        let ghost_house: Vec<Position> = board
+        let (min_col, max_col, min_row, max_row) = board
             .iter()
             .enumerate()
-            .filter(|(_, c)| **c == Square::House)
-            .map(|(i, _)| Position(i))
-            .collect();
-        let min_col = ghost_house
-            .iter()
-            .map(|p| p.col())
-            .min()
+            .filter(|&(_, sq)| *sq == Square::House)
+            .map(|(i, _)| {
+                let p = Position(i);
+                (p.col(), p.col(), p.row(), p.row())
+            })
+            .reduce(|(min_c, max_c, min_r, max_r), (c, _, r, _)| (
+                min_c.min(c),
+                max_c.max(c),
+                min_r.min(r),
+                max_r.max(r),
+            ))
             .expect("no ghost house");
-        let max_col = ghost_house
-            .iter()
-            .map(|p| p.col())
-            .max()
-            .expect("no ghost house");
-        let min_row = ghost_house
-            .iter()
-            .map(|p| p.row())
-            .min()
-            .expect("no ghost house");
-        let max_row = ghost_house
-            .iter()
-            .map(|p| p.row())
-            .max()
-            .expect("no ghost house");
+
         let ghost_start = [
             Position::from_xy(min_col, min_row),
             Position::from_xy(max_col, min_row),

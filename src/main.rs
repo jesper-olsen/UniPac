@@ -223,12 +223,7 @@ impl Game {
     }
 
     fn reset_ghosts(&mut self) {
-        self.ghosts = [
-            Ghost::new(self.board.ghost_start[0]),
-            Ghost::new(self.board.ghost_start[1]),
-            Ghost::new(self.board.ghost_start[2]),
-            Ghost::new(self.board.ghost_start[3]),
-        ];
+        self.ghosts = self.board.ghost_start.map(|p| Ghost::new(p));
     }
 
     fn period(&self) -> Period {
