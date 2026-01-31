@@ -1,5 +1,5 @@
 use crate::{
-    Game, GhostState, MARQUEE, MAX_PACMAN_LIVES, Period, Position,
+    Fruit, Game, GhostState, MARQUEE, MAX_PACMAN_LIVES, Period, Position,
     board::{Direction, Square},
 };
 use crossterm::{
@@ -11,6 +11,19 @@ use crossterm::{
 use std::io::{self, Write, stdout};
 use std::time::Duration;
 use std::{thread, time};
+
+fn get_fruit_symbol(fruit: Fruit) -> &'static str {
+    match fruit {
+        Fruit::Cherries => "\u{1F352}",
+        Fruit::Strawberry => "\u{1F353}",
+        Fruit::Peach => "\u{1F351}",
+        Fruit::RedApple => "\u{1F34E}",
+        Fruit::Grapes => "\u{1F347}",
+        Fruit::Galaxian => "\u{1F680}", // rocket ship
+        Fruit::Bell => "\u{1F514}",
+        Fruit::Key => "\u{1F511}",
+    }
+}
 
 pub fn init_render() -> io::Result<()> {
     terminal::enable_raw_mode()?;
@@ -89,7 +102,7 @@ pub fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()
                 Square::Wall => "#".blue(),
                 Square::Dot => ".".white(),
                 Square::Pill => "*".slow_blink(),
-                Square::Fruit if game.fruit_duration>0 => continue,
+                Square::Fruit if game.fruit_duration > 0 => continue,
                 _ => " ".white(),
             };
             let s = if bold { s.bold() } else { s };
@@ -103,7 +116,7 @@ pub fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()
 
     // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
     if game.fruit_duration > 0 {
-        let fruit = game.bonus().0;
+        let fruit = get_fruit_symbol(game.bonus());
         let (col, row) = (game.board.fruit.col(), game.board.fruit.row());
         crossterm::queue!(
             w,
@@ -273,7 +286,7 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         w,
         game,
         Position::from_xy(game.board.width - 1, game.board.height),
-        game.bonus().0,
+        get_fruit_symbol(game.bonus()),
     )?;
 
     let s = vec!['\u{1F642}'; game.lives as usize];

@@ -156,6 +156,33 @@ enum Period {
     Chase,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum Fruit {
+    Cherries,
+    Strawberry,
+    Peach,
+    RedApple,
+    Grapes,
+    Galaxian,
+    Bell,
+    Key,
+}
+
+impl Fruit {
+    pub fn value(&self) -> u32 {
+        match self {
+            Self::Cherries => 100,
+            Self::Strawberry => 300,
+            Self::Peach => 500,
+            Self::RedApple => 700,
+            Self::Grapes => 1000,
+            Self::Galaxian => 2000,
+            Self::Bell => 3000,
+            Self::Key => 5000,
+        }
+    }
+}
+
 impl Game {
     fn new() -> Self {
         let level = 0u32;
@@ -182,17 +209,16 @@ impl Game {
         game
     }
 
-    // return: fruit symbol & bonus value
-    fn bonus(&self) -> (&'static str, u32) {
+    fn bonus(&self) -> Fruit {
         match self.level {
-            0 => ("\u{1F352}", 100),        // cherries
-            1 => ("\u{1F353}", 300),        // strawberry
-            2 | 3 => ("\u{1F351}", 500),    // peach
-            4 | 5 => ("\u{1F34E}", 700),    // red apple
-            6 | 7 => ("\u{1F347}", 1000),   // grapes
-            8 | 9 => ("\u{1F680}", 2000),   // rocket ship (Galaxian)
-            10 | 11 => ("\u{1F514}", 3000), // bell
-            _ => ("\u{1F511}", 5000),       // key
+            0 => Fruit::Cherries,
+            1 => Fruit::Strawberry,
+            2 | 3 => Fruit::Peach,
+            4 | 5 => Fruit::RedApple,
+            6 | 7 => Fruit::Grapes,
+            8 | 9 => Fruit::Galaxian,
+            10 | 11 => Fruit::Bell,
+            _ => Fruit::Key,
         }
     }
 
@@ -363,7 +389,7 @@ impl Game {
             }
             Square::Fruit if self.fruit_duration > 0 => {
                 self.am.play(Sound::EatPill)?;
-                let bonus = self.bonus().1;
+                let bonus = self.bonus().value();
                 self.score += bonus;
                 self.fruit_duration = 0;
 
