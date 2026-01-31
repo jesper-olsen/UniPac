@@ -319,16 +319,8 @@ fn draw_marquee<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     }
 }
 
-pub fn flash_board(game: &Game) -> io::Result<()> {
-    for i in 0..10 {
-        let mut w = io::BufWriter::new(stdout());
-        draw_board(&mut w, game, i % 2 == 0)?;
-        w.flush()?;
-        thread::sleep(time::Duration::from_millis(300));
-    }
-    // clear screen - next board may have different height
-    crossterm::queue!(stdout(), terminal::Clear(terminal::ClearType::All),)?;
-    Ok(())
+pub fn clear_screen() -> io::Result<()> {
+    crossterm::queue!(stdout(), terminal::Clear(terminal::ClearType::All))
 }
 
 pub fn draw_ghosts<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {

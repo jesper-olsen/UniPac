@@ -177,12 +177,9 @@ impl Board {
                 let p = Position(i);
                 (p.col(), p.col(), p.row(), p.row())
             })
-            .reduce(|(min_c, max_c, min_r, max_r), (c, _, r, _)| (
-                min_c.min(c),
-                max_c.max(c),
-                min_r.min(r),
-                max_r.max(r),
-            ))
+            .reduce(|(min_c, max_c, min_r, max_r), (c, _, r, _)| {
+                (min_c.min(c), max_c.max(c), min_r.min(r), max_r.max(r))
+            })
             .expect("no ghost house");
 
         let ghost_start = [

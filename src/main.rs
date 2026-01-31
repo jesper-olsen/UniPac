@@ -223,7 +223,7 @@ impl Game {
     }
 
     fn reset_ghosts(&mut self) {
-        self.ghosts = self.board.ghost_start.map(|p| Ghost::new(p));
+        self.ghosts = self.board.ghost_start.map(Ghost::new);
     }
 
     fn period(&self) -> Period {
@@ -433,21 +433,28 @@ impl Game {
 } // impl Game
 
 fn game_loop(game: &mut Game) -> io::Result<GameState> {
+    let mut flash_frames_left: Option<u32> = None;
+
     loop {
         let start = time::Instant::now();
 
         // adjust overall speed by level
-        let base_speed = match game.level {
-            0 => 140,
-            1..=3 => 130,
-            _ => 120,
+        let base_speed = if flash_frames_left.is_some() {
+            300
+        } else {
+            match game.level {
+                0 => 140,
+                1..=3 => 130,
+                _ => 120,
+            }
         };
         // faster if power pill eaten
-        let speed_boost = if game.ghosts.iter().any(|g| g.edible_duration > 0) {
-            20
-        } else {
-            0
-        };
+        let speed_boost =
+            if flash_frames_left.is_none() && game.ghosts.iter().any(|g| g.edible_duration > 0) {
+                20
+            } else {
+                0
+            };
         thread::sleep(time::Duration::from_millis(base_speed - speed_boost));
 
         match tui::poll_input()? {
@@ -460,20 +467,34 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
 
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len(); // scroll marquee
 
-        game.update((time::Instant::now() - start).as_millis())?;
-        tui::draw_dynamic(game)?;
-
-        if game.player.dead {
-            return Ok(GameState::LifeLost);
-        }
-
-        match game.dots_left {
-            0 => return Ok(GameState::SheetComplete),
-            74 | 174 => {
-                game.fruit_duration = 1000 * (10 + random::<u128>() % 3);
-                game.dots_left -= 1;
+        match flash_frames_left {
+            Some(0) => return Ok(GameState::SheetComplete),
+            Some(count) => {
+                let mut w = io::BufWriter::new(stdout());
+                tui::draw_board(&mut w, game, count % 2 == 0)?;
+                tui::render_rhs(&mut w, game)?;
+                w.flush()?;
+                flash_frames_left = Some(count - 1)
             }
-            _ => (),
+            None => {
+                game.update((time::Instant::now() - start).as_millis())?;
+                tui::draw_dynamic(game)?;
+
+                if game.player.dead {
+                    return Ok(GameState::LifeLost);
+                }
+
+                if game.dots_left == 0 {
+                    game.am.play(Sound::OpeningSong).map_err(io::Error::other)?;
+                    flash_frames_left = Some(10);
+                }
+
+                // Fruit spawn logic
+                if matches!(game.dots_left, 74 | 174) {
+                    game.fruit_duration = 1000 * (10 + random::<u128>() % 3);
+                    game.dots_left -= 1;
+                }
+            }
         }
     }
 }
@@ -492,10 +513,9 @@ fn main_game() -> io::Result<()> {
         match game_loop(&mut game)? {
             GameState::UserQuit => break,
             GameState::SheetComplete => {
-                game.am.play(Sound::OpeningSong).map_err(io::Error::other)?;
-                tui::flash_board(&game)?;
                 game.level += 1;
                 game.repopulate_board();
+                tui::clear_screen()?; // next board may have different height
                 tui::render_game_info()?;
                 game.reset_ghosts();
                 game.player = Player::new(game.board.pacman_start);
