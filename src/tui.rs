@@ -10,7 +10,6 @@ use crossterm::{
 };
 use std::io::{self, Write, stdout};
 use std::time::Duration;
-use std::{thread, time};
 
 fn get_fruit_symbol(fruit: Fruit) -> &'static str {
     match fruit {
@@ -83,8 +82,6 @@ pub fn draw_message_at<W: Write>(w: &mut W, game: &Game, pos: Position, s: &str)
     w.flush()
 }
 
-//  The animated death and flashing screen happen syncronously. To be done
-//  correctly, they should be pseudo-event driven like the rest of the program.
 pub fn draw_dynamic(game: &Game) -> io::Result<()> {
     let mut w = io::BufWriter::new(stdout());
     draw_board(&mut w, game, false)?;
@@ -225,18 +222,14 @@ pub fn render_game_info() -> io::Result<()> {
     )
 }
 
-pub fn animate_dead_player(game: &Game) -> io::Result<()> {
-    for ch in "|Vv_.+*X*+. ".chars() {
-        let mut w = io::BufWriter::new(stdout());
-        draw_board(&mut w, game, false)?;
-        crossterm::queue!(
-            w,
-            cursor::MoveTo(game.player.pos.col() as u16, game.player.pos.row() as u16),
-            style::PrintStyledContent(ch.bold().yellow()),
-        )?;
-        w.flush()?;
-        thread::sleep(time::Duration::from_millis(150));
-    }
+pub fn draw_death_frame<W: io::Write>(w: &mut W, game: &Game, frame_idx: usize) -> io::Result<()> {
+    let animation = "|Vv_.+*X*+. ";
+    let ch = animation.chars().nth(frame_idx).unwrap_or(' ');
+    crossterm::queue!(
+        w,
+        cursor::MoveTo(game.player.pos.col() as u16, game.player.pos.row() as u16),
+        style::PrintStyledContent(ch.to_string().bold().yellow()), // Convert char to string for styling
+    )?;
     Ok(())
 }
 

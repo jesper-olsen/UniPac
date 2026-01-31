@@ -434,6 +434,7 @@ impl Game {
 
 fn game_loop(game: &mut Game) -> io::Result<GameState> {
     let mut flash_frames_left: Option<u32> = None;
+    let mut death_frames_left: Option<usize> = None;
 
     loop {
         let start = time::Instant::now();
@@ -441,6 +442,8 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
         // adjust overall speed by level
         let base_speed = if flash_frames_left.is_some() {
             300
+        } else if death_frames_left.is_some() {
+            150
         } else {
             match game.level {
                 0 => 140,
@@ -449,17 +452,21 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
             }
         };
         // faster if power pill eaten
-        let speed_boost =
-            if flash_frames_left.is_none() && game.ghosts.iter().any(|g| g.edible_duration > 0) {
-                20
-            } else {
-                0
-            };
+        let speed_boost = if flash_frames_left.is_none()
+            && death_frames_left.is_none()
+            && game.ghosts.iter().any(|g| g.edible_duration > 0)
+        {
+            20
+        } else {
+            0
+        };
         thread::sleep(time::Duration::from_millis(base_speed - speed_boost));
 
+        let anim = flash_frames_left.is_some() || death_frames_left.is_some();
         match tui::poll_input()? {
             tui::InputEvent::Quit => return Ok(GameState::UserQuit),
             tui::InputEvent::Pause => tui::pause(game)?,
+            _ if anim => (),
             tui::InputEvent::Cheat => game.ghosts_are_edible(game.pill_duration),
             tui::InputEvent::Direction(dir) => game.player.last_input_direction = dir,
             tui::InputEvent::None => {}
@@ -467,35 +474,77 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
 
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len(); // scroll marquee
 
-        match flash_frames_left {
-            Some(0) => return Ok(GameState::SheetComplete),
-            Some(count) => {
-                let mut w = io::BufWriter::new(stdout());
-                tui::draw_board(&mut w, game, count % 2 == 0)?;
-                tui::render_rhs(&mut w, game)?;
-                w.flush()?;
-                flash_frames_left = Some(count - 1)
+        let mut w = io::BufWriter::new(stdout());
+        if let Some(count) = flash_frames_left {
+            // --- VICTORY FLASH ---
+            if count == 0 {
+                return Ok(GameState::SheetComplete);
             }
-            None => {
-                game.update((time::Instant::now() - start).as_millis())?;
-                tui::draw_dynamic(game)?;
+            tui::draw_board(&mut w, game, count % 2 == 0)?;
+            tui::render_rhs(&mut w, game)?;
+            w.flush()?;
+            flash_frames_left = Some(count - 1);
+        } else if let Some(count) = death_frames_left {
+            // --- DEATH ANIMATION ---
+            if count == 0 {
+                return Ok(GameState::LifeLost);
+            }
+            tui::draw_board(&mut w, game, false)?;
+            tui::draw_death_frame(&mut w, game, 12 - count)?;
+            tui::render_rhs(&mut w, game)?;
+            w.flush()?;
+            death_frames_left = Some(count - 1);
+        } else {
+            // --- NORMAL GAMEPLAY ---
+            game.update((time::Instant::now() - start).as_millis())?;
+            tui::draw_dynamic(game)?;
 
-                if game.player.dead {
-                    return Ok(GameState::LifeLost);
-                }
+            if game.player.dead {
+                game.am.play(Sound::Die).map_err(io::Error::other)?;
+                death_frames_left = Some(12); // Start 12-frame death animation
+            }
 
-                if game.dots_left == 0 {
-                    game.am.play(Sound::OpeningSong).map_err(io::Error::other)?;
-                    flash_frames_left = Some(10);
-                }
+            if game.dots_left == 0 {
+                game.am.play(Sound::OpeningSong).map_err(io::Error::other)?;
+                flash_frames_left = Some(10);
+            }
 
-                // Fruit spawn logic
-                if matches!(game.dots_left, 74 | 174) {
-                    game.fruit_duration = 1000 * (10 + random::<u128>() % 3);
-                    game.dots_left -= 1;
-                }
+            // Fruit Logic
+            if matches!(game.dots_left, 74 | 174) {
+                game.fruit_duration = 1000 * (10 + random::<u128>() % 3);
+                game.dots_left -= 1;
             }
         }
+
+        //match flash_frames_left {
+        //    Some(0) => return Ok(GameState::SheetComplete),
+        //    Some(count) => {
+        //        let mut w = io::BufWriter::new(stdout());
+        //        tui::draw_board(&mut w, game, count % 2 == 0)?;
+        //        tui::render_rhs(&mut w, game)?;
+        //        w.flush()?;
+        //        flash_frames_left = Some(count - 1)
+        //    }
+        //    None => {
+        //        game.update((time::Instant::now() - start).as_millis())?;
+        //        tui::draw_dynamic(game)?;
+
+        //        if game.player.dead {
+        //            return Ok(GameState::LifeLost);
+        //        }
+
+        //        if game.dots_left == 0 {
+        //            game.am.play(Sound::OpeningSong).map_err(io::Error::other)?;
+        //            flash_frames_left = Some(10);
+        //        }
+
+        //        // Fruit spawn logic
+        //        if matches!(game.dots_left, 74 | 174) {
+        //            game.fruit_duration = 1000 * (10 + random::<u128>() % 3);
+        //            game.dots_left -= 1;
+        //        }
+        //    }
+        //}
     }
 }
 
@@ -522,11 +571,6 @@ fn main_game() -> io::Result<()> {
                 game.timecum = 0;
             }
             GameState::LifeLost => {
-                let mut w = io::BufWriter::new(stdout());
-                tui::render_rhs(&mut w, &game)?;
-                w.flush()?;
-                game.am.play(Sound::Die).map_err(io::Error::other)?;
-                tui::animate_dead_player(&game)?;
                 if game.lives == 0 {
                     break;
                 }
