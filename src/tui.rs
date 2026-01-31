@@ -235,7 +235,6 @@ pub fn animate_dead_player(game: &Game) -> io::Result<()> {
             style::PrintStyledContent(ch.bold().yellow()),
         )?;
         w.flush()?;
-
         thread::sleep(time::Duration::from_millis(150));
     }
     Ok(())

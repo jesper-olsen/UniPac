@@ -121,9 +121,9 @@ struct Player {
 }
 
 impl Player {
-    fn new(board: &Board) -> Player {
+    fn new(pacman_start: Position) -> Player {
         Player {
-            pos: board.pacman_start,
+            pos: pacman_start,
             dead: false,
             last_input_direction: Left,
             moving: Left,
@@ -187,7 +187,7 @@ impl Game {
     fn new() -> Self {
         let level = 0u32;
         let board = Board::new(level);
-        let player = Player::new(&board);
+        let player = Player::new(board.pacman_start);
         let mut game = Game {
             timecum: 0,
             mq_idx: 0,
@@ -496,9 +496,9 @@ fn main_game() -> io::Result<()> {
                 tui::flash_board(&game)?;
                 game.level += 1;
                 game.repopulate_board();
-                game.reset_ghosts();
                 tui::render_game_info()?;
-                game.player = Player::new(&game.board);
+                game.reset_ghosts();
+                game.player = Player::new(game.board.pacman_start);
                 game.timecum = 0;
             }
             GameState::LifeLost => {
@@ -513,14 +513,12 @@ fn main_game() -> io::Result<()> {
                 game.lives -= 1;
                 thread::sleep(time::Duration::from_millis(100));
                 game.reset_ghosts();
-                game.player = Player::new(&game.board);
+                game.player = Player::new(game.board.pacman_start);
             }
         };
     }
-    {
-        let mut w = io::BufWriter::new(stdout());
-        tui::draw_message(&mut w, &game, "GAME  OVER", true)
-    }
+    let mut w = io::BufWriter::new(stdout());
+    tui::draw_message(&mut w, &game, "GAME  OVER", true)
 }
 
 fn main() -> io::Result<()> {
