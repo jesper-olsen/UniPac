@@ -1,6 +1,17 @@
 // All mazes have the same width. Height varies.
 pub const WIDTH: usize = MAZE_REG_PACMAN[0].len();
 
+// Legend:
+// '#': Wall
+// '.': Pellet (Dot)
+// 'P': Power Pellet (Energizer)
+// 'p': Pacman starting position
+// 'H': Ghost House / Spawn area
+// '-': Ghost House Gate
+// '$': Fruit / Bonus item spawn point
+// ';': Slow zones / Tunnel paths
+// ' ': Empty path
+
 pub static MAZE_SMALL_PACMAN: [&str; 24] = [
     "############################", //  0
     "#............##............#", //  1

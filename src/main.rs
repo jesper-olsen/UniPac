@@ -462,14 +462,15 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
         };
         thread::sleep(time::Duration::from_millis(base_speed - speed_boost));
 
-        let anim = flash_frames_left.is_some() || death_frames_left.is_some();
         match tui::poll_input()? {
             tui::InputEvent::Quit => return Ok(GameState::UserQuit),
             tui::InputEvent::Pause => tui::pause(game)?,
-            _ if anim => (),
-            tui::InputEvent::Cheat => game.ghosts_are_edible(game.pill_duration),
+            tui::InputEvent::Resize => {
+                tui::clear_screen()?;
+                tui::render_game_info()?; // Re-draw titles and scores
+            }
             tui::InputEvent::Direction(dir) => game.player.last_input_direction = dir,
-            tui::InputEvent::None => {}
+            _ => {}
         }
 
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len(); // scroll marquee
@@ -515,36 +516,6 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
                 game.dots_left -= 1;
             }
         }
-
-        //match flash_frames_left {
-        //    Some(0) => return Ok(GameState::SheetComplete),
-        //    Some(count) => {
-        //        let mut w = io::BufWriter::new(stdout());
-        //        tui::draw_board(&mut w, game, count % 2 == 0)?;
-        //        tui::render_rhs(&mut w, game)?;
-        //        w.flush()?;
-        //        flash_frames_left = Some(count - 1)
-        //    }
-        //    None => {
-        //        game.update((time::Instant::now() - start).as_millis())?;
-        //        tui::draw_dynamic(game)?;
-
-        //        if game.player.dead {
-        //            return Ok(GameState::LifeLost);
-        //        }
-
-        //        if game.dots_left == 0 {
-        //            game.am.play(Sound::OpeningSong).map_err(io::Error::other)?;
-        //            flash_frames_left = Some(10);
-        //        }
-
-        //        // Fruit spawn logic
-        //        if matches!(game.dots_left, 74 | 174) {
-        //            game.fruit_duration = 1000 * (10 + random::<u128>() % 3);
-        //            game.dots_left -= 1;
-        //        }
-        //    }
-        //}
     }
 }
 
