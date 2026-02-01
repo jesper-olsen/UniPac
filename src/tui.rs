@@ -91,14 +91,63 @@ pub fn draw_dynamic(game: &Game) -> io::Result<()> {
     w.flush()
 }
 
+fn get_wall_char(board: &crate::board::Board, pos: Position) -> &'static str {
+    let col = pos.col();
+    let row = pos.row();
+
+    let up = row > 0
+        && matches!(
+            board[Position::from_xy(col, row - 1)],
+            Square::Wall | Square::Gate
+        );
+    let down = row < board.height - 1
+        && matches!(
+            board[Position::from_xy(col, row + 1)],
+            Square::Wall | Square::Gate
+        );
+    let left = col > 0
+        && matches!(
+            board[Position::from_xy(col - 1, row)],
+            Square::Wall | Square::Gate
+        );
+    let right = col < board.width - 1
+        && matches!(
+            board[Position::from_xy(col + 1, row)],
+            Square::Wall | Square::Gate
+        );
+
+    match (up, down, left, right) {
+        (true, true, true, true) => "╬",
+        (true, true, true, false) => "╣",
+        (true, true, false, true) => "╠",
+        (true, false, true, true) => "╩",
+        (false, true, true, true) => "╦",
+        (true, true, false, false) => "║",
+        (false, false, true, true) => "═",
+        (true, false, true, false) => "╝",
+        (true, false, false, true) => "╚",
+        (false, true, true, false) => "╗",
+        (false, true, false, true) => "╔",
+        (true, _, _, _) => "║",
+        (false, true, _, _) => "║",
+        (_, _, true, _) => "═",
+        (_, _, _, true) => "═",
+        _ => "█",
+    }
+}
+
 pub fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()> {
     for col in 0..game.board.width {
         for row in 0..game.board.height {
             let p = Position::from_xy(col, row);
             let s = match game.board[p] {
-                Square::Wall => "#".blue(),
+                //Square::Wall => "#".blue(),
+                Square::Wall => get_wall_char(&game.board, p).blue(),
+                //Square::Wall => "\u{2588}".blue(), // Full Block
                 Square::Dot => ".".white(),
-                Square::Pill => "*".slow_blink(),
+                //Square::Pill => "*".slow_blink(),
+                Square::Pill => "●".slow_blink().white(), // Using a rounder dot for pills
+                Square::Gate => "─".white(),
                 Square::Fruit if game.fruit_duration > 0 => continue,
                 _ => " ".white(),
             };

@@ -1,6 +1,6 @@
 use rand::random;
 use std::io::{self, Write, stdout};
-use std::{thread, time};
+use std::{thread, time, time::Duration};
 
 mod audio;
 mod board;
@@ -460,7 +460,10 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
         } else {
             0
         };
-        thread::sleep(time::Duration::from_millis(base_speed - speed_boost));
+        let target_frame_time = Duration::from_millis(base_speed - speed_boost);
+        if start.elapsed() < target_frame_time {
+            thread::sleep(target_frame_time - start.elapsed());
+        }
 
         match tui::poll_input()? {
             tui::InputEvent::Quit => return Ok(GameState::UserQuit),
