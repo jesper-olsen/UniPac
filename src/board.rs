@@ -114,17 +114,14 @@ pub struct Board {
 impl Board {
     pub fn new(level: u32) -> Self {
         let (maze, maze_name): (&[&str], &str) = match level {
-            0 => (&MAZE_SMALL_PACMAN, "Pacman Small"),
-            2 => (&MAZE_MS_PACMAN_PINK, "Ms. Pacman Pink"),
-            3 => (&MAZE_MS_PACMAN_LIGHT_BLUE, "Ms. Pacman Light Blue"),
-            4 => (&MAZE_MS_PACMAN_ORANGE, "Ms. Pacman Orange"),
-            5 => (&MAZE_MS_PACMAN_DARK_BLUE, "Ms. Pacman Dark Blue"),
-            _ => (&MAZE_REG_PACMAN, "Pacman Regular"),
+            0 => (&MAZE_SMALL_PACMAN, "Small"),
+            2 => (&MAZE_MS_PACMAN_PINK, "Pink"),
+            3 => (&MAZE_MS_PACMAN_LIGHT_BLUE, "Light Blue"),
+            4 => (&MAZE_MS_PACMAN_ORANGE, "Orange"),
+            5 => (&MAZE_MS_PACMAN_DARK_BLUE, "Dark Blue"),
+            _ => (&MAZE_REG_PACMAN, "Regular"),
         };
-        //let board: Vec<Square> = maze
-        //    .iter()
-        //    .flat_map(|&row| row.chars().map(Square::from_char))
-        //    .collect();
+
         let board: Vec<Square> = maze
             .iter()
             .flat_map(|&row| row.chars())
