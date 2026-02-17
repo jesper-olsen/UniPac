@@ -430,6 +430,43 @@ impl Game {
         }
         Ok(())
     } // update_player
+
+    // one full game
+    fn run(&mut self) -> io::Result<()> {
+        tui::render_game_info()?;
+        loop {
+            tui::draw_dynamic(self)?;
+            {
+                let mut w = io::BufWriter::new(stdout());
+                tui::draw_message(&mut w, self, "READY!", false)?;
+            }
+            thread::sleep(time::Duration::from_millis(1200));
+
+            match game_loop(self)? {
+                GameState::UserQuit => break,
+                GameState::SheetComplete => {
+                    self.level += 1;
+                    self.repopulate_board();
+                    tui::clear_screen()?; // next board may have different height
+                    tui::render_game_info()?;
+                    self.reset_ghosts();
+                    self.player = Player::new(self.board.pacman_start);
+                    self.timecum = 0;
+                }
+                GameState::LifeLost => {
+                    if self.lives == 0 {
+                        break;
+                    }
+                    self.lives -= 1;
+                    thread::sleep(time::Duration::from_millis(100));
+                    self.reset_ghosts();
+                    self.player = Player::new(self.board.pacman_start);
+                }
+            };
+        }
+        let mut w = io::BufWriter::new(stdout());
+        tui::draw_message(&mut w, self, "GAME  OVER", true)
+    }
 } // impl Game
 
 fn game_loop(game: &mut Game) -> io::Result<GameState> {
@@ -522,42 +559,6 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
     }
 }
 
-fn main_game(game: &mut Game) -> io::Result<()> {
-    tui::render_game_info()?;
-    loop {
-        tui::draw_dynamic(game)?;
-        {
-            let mut w = io::BufWriter::new(stdout());
-            tui::draw_message(&mut w, game, "READY!", false)?;
-        }
-        thread::sleep(time::Duration::from_millis(1200));
-
-        match game_loop(game)? {
-            GameState::UserQuit => break,
-            GameState::SheetComplete => {
-                game.level += 1;
-                game.repopulate_board();
-                tui::clear_screen()?; // next board may have different height
-                tui::render_game_info()?;
-                game.reset_ghosts();
-                game.player = Player::new(game.board.pacman_start);
-                game.timecum = 0;
-            }
-            GameState::LifeLost => {
-                if game.lives == 0 {
-                    break;
-                }
-                game.lives -= 1;
-                thread::sleep(time::Duration::from_millis(100));
-                game.reset_ghosts();
-                game.player = Player::new(game.board.pacman_start);
-            }
-        };
-    }
-    let mut w = io::BufWriter::new(stdout());
-    tui::draw_message(&mut w, game, "GAME  OVER", true)
-}
-
 fn main() -> io::Result<()> {
     // make sure crossterm doesn't leave the terminal in a raw state in case of panics
     let original_hook = std::panic::take_hook();
@@ -570,7 +571,7 @@ fn main() -> io::Result<()> {
     tui::init_render()?;
     loop {
         let mut game = Game::new();
-        main_game(&mut game)?;
+        game.run()?;
         if !tui::another_game(&mut game)? {
             break;
         }
