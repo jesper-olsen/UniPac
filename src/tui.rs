@@ -234,28 +234,31 @@ pub fn pause(game: &Game) -> io::Result<()> {
     }
 }
 
-pub fn another_game() -> io::Result<bool> {
+pub fn another_game(game: &mut Game) -> io::Result<bool> {
     let s1 = "Another game, squire?";
     let s2 = "Y/N";
 
-    crossterm::queue!(
-        stdout(),
-        cursor::MoveTo(centered_x(s1), 12),
-        style::PrintStyledContent(s1.red()),
-        cursor::MoveTo(centered_x(s2), 14),
-        style::PrintStyledContent(s2.red()),
-    )?;
-    stdout().flush()?;
-
     loop {
-        if let Ok(Event::Key(key_event)) = read() {
-            // Filter out Release/Repeat events for Windows compatibility
-            if key_event.kind == crossterm::event::KeyEventKind::Press {
-                match key_event.code {
-                    KeyCode::Char('y' | 'Y') => return Ok(true),
-                    KeyCode::Char('n' | 'N') => return Ok(false),
-                    _ => (),
-                }
+        let mut w = io::BufWriter::new(stdout());
+        draw_marquee(&mut w, game)?;
+        crossterm::queue!(
+            w,
+            cursor::MoveTo(centered_x(s1), 12),
+            style::PrintStyledContent(s1.red()),
+            cursor::MoveTo(centered_x(s2), 14),
+            style::PrintStyledContent(s2.red()),
+        )?;
+        w.flush()?;
+        game.mq_idx = (game.mq_idx + 1) % MARQUEE.len();
+
+        if poll(Duration::from_millis(120))?
+            && let Ok(Event::Key(key_event)) = read()
+            && key_event.kind == crossterm::event::KeyEventKind::Press
+        {
+            match key_event.code {
+                KeyCode::Char('y' | 'Y') => return Ok(true),
+                KeyCode::Char('n' | 'N') => return Ok(false),
+                _ => (),
             }
         }
     }

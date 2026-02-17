@@ -522,18 +522,17 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
     }
 }
 
-fn main_game() -> io::Result<()> {
-    let mut game = Game::new();
+fn main_game(game: &mut Game) -> io::Result<()> {
     tui::render_game_info()?;
     loop {
-        tui::draw_dynamic(&game)?;
+        tui::draw_dynamic(game)?;
         {
             let mut w = io::BufWriter::new(stdout());
-            tui::draw_message(&mut w, &game, "READY!", false)?;
+            tui::draw_message(&mut w, game, "READY!", false)?;
         }
         thread::sleep(time::Duration::from_millis(1200));
 
-        match game_loop(&mut game)? {
+        match game_loop(game)? {
             GameState::UserQuit => break,
             GameState::SheetComplete => {
                 game.level += 1;
@@ -556,7 +555,7 @@ fn main_game() -> io::Result<()> {
         };
     }
     let mut w = io::BufWriter::new(stdout());
-    tui::draw_message(&mut w, &game, "GAME  OVER", true)
+    tui::draw_message(&mut w, game, "GAME  OVER", true)
 }
 
 fn main() -> io::Result<()> {
@@ -570,8 +569,9 @@ fn main() -> io::Result<()> {
 
     tui::init_render()?;
     loop {
-        main_game()?;
-        if !tui::another_game()? {
+        let mut game = Game::new();
+        main_game(&mut game)?;
+        if !tui::another_game(&mut game)? {
             break;
         }
     }
