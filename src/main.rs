@@ -1,4 +1,3 @@
-use rand::random;
 use std::io::{self, Write, stdout};
 use std::{thread, time, time::Duration};
 
@@ -30,7 +29,7 @@ static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man.
 
 const MAX_PACMAN_LIVES: u32 = 6;
 fn pct(n: u8) -> bool {
-    random::<u8>() % 100 < n
+    rand::random_range(0..100) < n
 }
 
 enum GameState {
@@ -315,7 +314,9 @@ impl Game {
             g.edible_duration = g.edible_duration.saturating_sub(telaps);
             (g.direction, g.pos) = match g.state {
                 GhostState::Home => {
-                    let pos = g.pos.go([Left, Right, Up, Down][random::<usize>() % 4]);
+                    let pos = g
+                        .pos
+                        .go([Left, Right, Up, Down][rand::random_range(0..4)]);
                     match self.board[pos] {
                         Square::House => (Left, pos),
                         Square::Gate => {
@@ -327,9 +328,10 @@ impl Game {
                 }
                 GhostState::Gateway => {
                     g.state = GhostState::Outside;
-                    match random::<u8>() % 2 {
-                        0 => (Left, g.pos.go(Up)),
-                        _ => (Right, g.pos.go(Up)),
+                    if pct(50) {
+                        (Left, g.pos.go(Up))
+                    } else {
+                        (Right, g.pos.go(Up))
                     }
                 }
                 GhostState::Dead => {
@@ -552,7 +554,7 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
 
             // Fruit Logic
             if matches!(game.dots_left, 74 | 174) {
-                game.fruit_duration = 1000 * (10 + random::<u128>() % 3);
+                game.fruit_duration = 1000 * (10 + rand::random_range(0..3));
                 game.dots_left -= 1;
             }
         }

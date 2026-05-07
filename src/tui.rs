@@ -132,7 +132,7 @@ fn get_wall_char(board: &crate::board::Board, pos: Position) -> &'static str {
         (false, true, _, _) => "║",
         (_, _, true, _) => "═",
         (_, _, _, true) => "═",
-        _ => "█",
+        (false, false, false, false) => "█",
     }
 }
 

@@ -1,8 +1,8 @@
 use std::{io, path};
 
 use kira::{
-    manager::{AudioManager, AudioManagerSettings, backend::cpal::CpalBackend},
-    sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
+    AudioManager, AudioManagerSettings, DefaultBackend,
+    sound::static_sound::{StaticSoundData, StaticSoundHandle},
 };
 
 #[derive(Copy, Clone, Eq, Hash, PartialEq)]
@@ -15,6 +15,7 @@ pub enum Sound {
 }
 
 const AUDIO_DIR: &str = "Audio";
+
 const AUDIO_FILES: [&str; 5] = [
     "die.ogg",
     "eatpill.ogg",
@@ -24,20 +25,22 @@ const AUDIO_FILES: [&str; 5] = [
 ];
 
 pub struct AM {
-    manager: AudioManager,
+    manager: AudioManager<DefaultBackend>,
     sounds: [StaticSoundData; AUDIO_FILES.len()],
 }
 
 impl Default for AM {
     fn default() -> Self {
-        let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
+        let manager = AudioManager::<DefaultBackend>::new(AudioManagerSettings::default())
             .expect("Failed to create AM");
 
         let sounds = AUDIO_FILES.map(|audio_file| {
             let path = path::Path::new(AUDIO_DIR).join(audio_file);
-            StaticSoundData::from_file(&path, StaticSoundSettings::default())
+
+            StaticSoundData::from_file(&path)
                 .unwrap_or_else(|e| panic!("Failed to load sound: {path:?}: {e}"))
         });
+
         AM { manager, sounds }
     }
 }
