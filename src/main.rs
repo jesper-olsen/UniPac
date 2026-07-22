@@ -314,9 +314,7 @@ impl Game {
             g.edible_duration = g.edible_duration.saturating_sub(telaps);
             (g.direction, g.pos) = match g.state {
                 GhostState::Home => {
-                    let pos = g
-                        .pos
-                        .go([Left, Right, Up, Down][rand::random_range(0..4)]);
+                    let pos = g.pos.go([Left, Right, Up, Down][rand::random_range(0..4)]);
                     match self.board[pos] {
                         Square::House => (Left, pos),
                         Square::Gate => {
