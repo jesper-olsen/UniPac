@@ -541,12 +541,12 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
             tui::draw_dynamic(game)?;
 
             if game.player.dead {
-                game.am.play(Sound::Die).map_err(io::Error::other)?;
+                game.am.play(Sound::Die)?;
                 death_frames_left = Some(12); // Start 12-frame death animation
             }
 
             if game.dots_left == 0 {
-                game.am.play(Sound::OpeningSong).map_err(io::Error::other)?;
+                game.am.play(Sound::OpeningSong)?;
                 flash_frames_left = Some(10);
             }
 
