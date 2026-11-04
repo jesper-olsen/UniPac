@@ -1,5 +1,5 @@
 use std::io::{self, Write, stdout};
-use std::{thread, time, time::Duration};
+use std::{thread, time};
 
 mod audio;
 mod board;
@@ -79,7 +79,7 @@ impl Ghost {
     }
 
     fn moves(&self, board: &Board, target: Position) -> (Direction, Position) {
-        [Right, Left, Down, Up]
+        [Right, Down, Left, Up]
             .into_iter()
             .filter_map(|d| {
                 let p = self.pos.go(d);
@@ -304,8 +304,8 @@ impl Game {
         // Inky - target average of pacman pos and Blinky
         chase_target[2] = self.player.pos.average(self.ghosts[1].pos);
 
-        // Clyde - target pacman if less than 8 squares away - otherwise target corner
-        if self.player.pos.dist_sqr(self.ghosts[3].pos) >= 64 {
+        // Clyde - retreat to corner if close to pacman
+        if self.player.pos.dist_sqr(self.ghosts[3].pos) < 64 {
             chase_target[3] = scatter_target[3]
         }
 
@@ -497,7 +497,7 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
         } else {
             0
         };
-        let target_frame_time = Duration::from_millis(base_speed - speed_boost);
+        let target_frame_time = time::Duration::from_millis(base_speed - speed_boost);
         if start.elapsed() < target_frame_time {
             thread::sleep(target_frame_time - start.elapsed());
         }
