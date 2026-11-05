@@ -270,7 +270,6 @@ impl Game {
                     // flash message
                     let mut w = io::BufWriter::new(stdout());
                     tui::draw_message_at(&mut w, self, self.player.pos, &format!("{score}"))?;
-                    w.flush()?;
                     thread::sleep(time::Duration::from_millis(150));
                 }
             }
@@ -388,7 +387,6 @@ impl Game {
                 // flash message
                 let mut w = io::BufWriter::new(stdout());
                 tui::draw_message(&mut w, self, &format!("{bonus}"), false)?;
-                w.flush()?;
                 thread::sleep(time::Duration::from_millis(150));
             }
             Square::Empty | Square::Fruit | Square::Tunnel | Square::Start => (),
@@ -436,7 +434,6 @@ impl Game {
             // flash message
             let mut w = io::BufWriter::new(stdout());
             tui::draw_message(&mut w, self, "READY!", false)?;
-            w.flush()?;
             thread::sleep(time::Duration::from_millis(1200));
 
             match game_loop(self)? {
