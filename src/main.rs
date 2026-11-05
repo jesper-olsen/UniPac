@@ -266,20 +266,16 @@ impl Game {
                     g.state = GhostState::Dead;
                     g.edible_duration = 0;
                     self.am.play(Sound::EatGhost)?;
-                    {
-                        let mut w = io::BufWriter::new(stdout());
-                        tui::draw_message_at(&mut w, self, self.player.pos, &format!("{score}"))?;
-                    }
+
+                    // flash message
+                    let mut w = io::BufWriter::new(stdout());
+                    tui::draw_message_at(&mut w, self, self.player.pos, &format!("{score}"))?;
+                    w.flush()?;
                     thread::sleep(time::Duration::from_millis(150));
                 }
             }
         }
         Ok(())
-    }
-
-    fn update_fruit(&mut self, telaps: u128) {
-        self.timecum += telaps;
-        self.fruit_duration = self.fruit_duration.saturating_sub(telaps);
     }
 
     fn update_ghosts(&mut self, telaps: u128) {
@@ -363,7 +359,8 @@ impl Game {
         self.check_player_vs_ghosts()?;
         self.update_ghosts(dur);
         self.check_player_vs_ghosts()?;
-        self.update_fruit(dur);
+        self.timecum += dur;
+        self.fruit_duration = self.fruit_duration.saturating_sub(dur);
         Ok(())
     }
 
@@ -388,10 +385,10 @@ impl Game {
                 self.score += bonus;
                 self.fruit_duration = 0;
 
-                {
-                    let mut w = io::BufWriter::new(stdout());
-                    tui::draw_message(&mut w, self, &format!("{bonus}"), false)?;
-                }
+                // flash message
+                let mut w = io::BufWriter::new(stdout());
+                tui::draw_message(&mut w, self, &format!("{bonus}"), false)?;
+                w.flush()?;
                 thread::sleep(time::Duration::from_millis(150));
             }
             Square::Empty | Square::Fruit | Square::Tunnel | Square::Start => (),
@@ -436,10 +433,10 @@ impl Game {
         tui::render_game_info()?;
         loop {
             tui::draw_dynamic(self)?;
-            {
-                let mut w = io::BufWriter::new(stdout());
-                tui::draw_message(&mut w, self, "READY!", false)?;
-            }
+            // flash message
+            let mut w = io::BufWriter::new(stdout());
+            tui::draw_message(&mut w, self, "READY!", false)?;
+            w.flush()?;
             thread::sleep(time::Duration::from_millis(1200));
 
             match game_loop(self)? {
