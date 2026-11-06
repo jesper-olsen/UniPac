@@ -1,6 +1,7 @@
 use crate::{
     Fruit, Game, GhostState, MARQUEE, MAX_PACMAN_LIVES, Period, Position,
     board::{Direction, Square},
+    maze::WIDTH,
 };
 use crossterm::{
     cursor,
@@ -10,6 +11,16 @@ use crossterm::{
 };
 use std::io::{self, Write, stdout};
 use std::time::Duration;
+
+/// Terminal cells per maze tile. Cells are roughly twice as tall as wide, so
+/// 2x1 cells per tile makes tiles close to square, and it is exactly the width
+/// of the (East Asian Wide) emoji used for ghosts, fruit and lives.
+const CELL_W: u16 = 2;
+
+/// Screen column of the left cell of maze column `col`.
+fn sx(col: usize) -> u16 {
+    col as u16 * CELL_W
+}
 
 fn get_fruit_symbol(fruit: Fruit) -> &'static str {
     match fruit {
@@ -47,7 +58,7 @@ pub fn close_render() -> io::Result<()> {
 }
 
 pub fn centered_x(s: &str) -> u16 {
-    let leftedge: u16 = 32;
+    let leftedge: u16 = sx(WIDTH) + 2;
     let cols = terminal::size().map(|(c, _)| c).unwrap_or(80);
     let n: u16 = s.len() as u16;
     let offset = cols.saturating_sub(leftedge).saturating_sub(n) / 2;
@@ -55,7 +66,7 @@ pub fn centered_x(s: &str) -> u16 {
 }
 
 pub fn draw_message<W: Write>(w: &mut W, game: &Game, s: &str, blink: bool) -> io::Result<()> {
-    let col = ((game.board.width - s.len()) / 2) as u16;
+    let col = ((sx(game.board.width) as usize).saturating_sub(s.len()) / 2) as u16;
     let styled = if blink {
         s.bold().slow_blink()
     } else {
@@ -71,7 +82,7 @@ pub fn draw_message<W: Write>(w: &mut W, game: &Game, s: &str, blink: bool) -> i
 
 pub fn draw_message_at<W: Write>(w: &mut W, game: &Game, pos: Position, s: &str) -> io::Result<()> {
     let (col, row) = (
-        std::cmp::min(pos.col(), game.board.width - 4) as u16,
+        std::cmp::min(sx(pos.col()), sx(game.board.width) - 4),
         pos.row() as u16,
     );
     crossterm::queue!(
@@ -91,6 +102,9 @@ pub fn draw_dynamic(game: &Game) -> io::Result<()> {
     w.flush()
 }
 
+/// The two terminal cells for a wall tile. The left cell is the box-drawing
+/// glyph; the right cell continues the line east ('═') if the tile connects
+/// to its right neighbour, so horizontal walls stay unbroken.
 fn get_wall_char(board: &crate::board::Board, pos: Position) -> &'static str {
     let col = pos.col();
     let row = pos.row();
@@ -117,22 +131,22 @@ fn get_wall_char(board: &crate::board::Board, pos: Position) -> &'static str {
         );
 
     match (up, down, left, right) {
-        (true, true, true, true) => "╬",
-        (true, true, true, false) => "╣",
-        (true, true, false, true) => "╠",
-        (true, false, true, true) => "╩",
-        (false, true, true, true) => "╦",
-        (true, true, false, false) => "║",
-        (false, false, true, true) => "═",
-        (true, false, true, false) => "╝",
-        (true, false, false, true) => "╚",
-        (false, true, true, false) => "╗",
-        (false, true, false, true) => "╔",
-        (true, _, _, _) => "║",
-        (false, true, _, _) => "║",
-        (_, _, true, _) => "═",
-        (_, _, _, true) => "═",
-        (false, false, false, false) => "█",
+        (true, true, true, true) => "╬═",
+        (true, true, true, false) => "╣ ",
+        (true, true, false, true) => "╠═",
+        (true, false, true, true) => "╩═",
+        (false, true, true, true) => "╦═",
+        (true, true, false, false) => "║ ",
+        (false, false, true, true) => "══",
+        (true, false, true, false) => "╝ ",
+        (true, false, false, true) => "╚═",
+        (false, true, true, false) => "╗ ",
+        (false, true, false, true) => "╔═",
+        (true, _, _, _) => "║ ",
+        (false, true, _, _) => "║ ",
+        (_, _, true, _) => "═ ",
+        (_, _, _, true) => "══",
+        (false, false, false, false) => "██",
     }
 }
 
@@ -144,32 +158,23 @@ pub fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()
                 //Square::Wall => "#".blue(),
                 Square::Wall => get_wall_char(&game.board, p).blue(),
                 //Square::Wall => "\u{2588}".blue(), // Full Block
-                Square::Dot => ".".white(),
+                Square::Dot => ". ".white(),
                 //Square::Pill => "*".slow_blink(),
-                Square::Pill => "●".slow_blink().white(), // Using a rounder dot for pills
-                Square::Gate => "─".white(),
-                Square::Fruit if game.fruit_duration > 0 => continue,
-                _ => " ".white(),
+                Square::Pill => "● ".slow_blink().white(), // Using a rounder dot for pills
+                Square::Gate => "──".white(),
+                // emoji are 2 cells wide - exactly one tile
+                Square::Fruit if game.fruit_duration > 0 => get_fruit_symbol(game.bonus()).white(),
+                _ => "  ".white(),
             };
             let s = if bold { s.bold() } else { s };
             crossterm::queue!(
                 w,
-                cursor::MoveTo(col as u16, row as u16),
+                cursor::MoveTo(sx(col), row as u16),
                 style::PrintStyledContent(s),
             )?;
         }
     }
 
-    // print fruit separately - because not rendered correctly otherwise (is wider than one cell)
-    if game.fruit_duration > 0 {
-        let fruit = get_fruit_symbol(game.bonus());
-        let (col, row) = (game.board.fruit.col(), game.board.fruit.row());
-        crossterm::queue!(
-            w,
-            cursor::MoveTo(col as u16, row as u16),
-            style::Print(fruit),
-        )?;
-    }
     Ok(())
 }
 
@@ -180,7 +185,7 @@ pub fn draw_player<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         Direction::Up => ['V', 'V', 'V', 'V', '|', '|'],
         Direction::Down => ['^', '^', '^', '^', '|', '|'],
     }[game.player.anim_frame];
-    let (col, row) = (game.player.pos.col() as u16, game.player.pos.row() as u16);
+    let (col, row) = (sx(game.player.pos.col()), game.player.pos.row() as u16);
     crossterm::queue!(
         w,
         cursor::MoveTo(col, row),
@@ -265,16 +270,20 @@ pub fn another_game(game: &mut Game) -> io::Result<bool> {
 }
 
 pub fn render_game_info() -> io::Result<()> {
-    let s1: &str = "UniPac - Unicode-powered Pacman";
-    let s2 = "Rusty Edition 2025 ";
+    // the panel right of the maze is 22 columns wide in an 80 column terminal
+    let s1: &str = "UniPac";
+    let s2 = "Unicode-powered Pacman";
+    let s3 = "Rusty Edition 2025";
 
     crossterm::queue!(
         stdout(),
         terminal::Clear(terminal::ClearType::All),
-        cursor::MoveTo(centered_x(s1), 2),
+        cursor::MoveTo(centered_x(s1), 1),
         style::PrintStyledContent(s1.cyan()),
-        cursor::MoveTo(centered_x(s2), 3),
-        style::PrintStyledContent(s2.yellow()),
+        cursor::MoveTo(centered_x(s2), 2),
+        style::PrintStyledContent(s2.cyan()),
+        cursor::MoveTo(centered_x(s3), 3),
+        style::PrintStyledContent(s3.yellow()),
     )
 }
 
@@ -283,7 +292,7 @@ pub fn draw_death_frame<W: io::Write>(w: &mut W, game: &Game, frame_idx: usize) 
     let ch = animation.chars().nth(frame_idx).unwrap_or(' ');
     crossterm::queue!(
         w,
-        cursor::MoveTo(game.player.pos.col() as u16, game.player.pos.row() as u16),
+        cursor::MoveTo(sx(game.player.pos.col()), game.player.pos.row() as u16),
         style::PrintStyledContent(ch.to_string().bold().yellow()), // Convert char to string for styling
     )?;
     Ok(())
@@ -314,7 +323,7 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     };
     crossterm::queue!(
         w,
-        cursor::MoveTo(game.board.width as u16 + 2, game.board.height as u16 - 1),
+        cursor::MoveTo(sx(game.board.width) + 2, game.board.height as u16 - 1),
         style::Print(s)
     )?;
 
@@ -338,7 +347,7 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     )?;
 
     let s = vec!['\u{1F642}'; game.lives as usize];
-    let s1 = vec![' '; MAX_PACMAN_LIVES as usize - s.len()];
+    let s1 = vec![' '; 2 * (MAX_PACMAN_LIVES as usize - s.len())]; // 2 cells per emoji
     let s2: String = s.into_iter().chain(s1).collect::<String>();
     draw_message_at(w, game, Position::from_xy(0, game.board.height), &s2)?;
     draw_marquee(w, game)
@@ -385,7 +394,7 @@ pub fn draw_ghosts<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         };
         crossterm::queue!(
             w,
-            cursor::MoveTo(g.pos.col() as u16, g.pos.row() as u16),
+            cursor::MoveTo(sx(g.pos.col()), g.pos.row() as u16),
             style::Print(s)
         )?;
     }
