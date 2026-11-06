@@ -1,4 +1,4 @@
-# UniPac: Unicode-powered Pacman Adventure 
+# UniPac: Unicode-powered pacman adventure 
 
 Pacman for the terminal. 
 
@@ -18,8 +18,11 @@ Mazes:
 Pacman is animated with ascii symbols and the ghosts with unicode codepoints (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
  Unicode has symbols for most of the fruit bonuses (🍒,🍓,🍑,🍎,🍇,🚀,🔔,🔑), but not for the ghosts themselves.
 
-Controls: Arrow keys to steer, space to pause, q to quit.
+## Controls
 
+Arrow keys to steer, space to pause, q to quit.
+
+## Build and run
 ```
   git clone https://github.com/jesper-olsen/UniPac
   cd UniPac
@@ -30,7 +33,8 @@ Controls: Arrow keys to steer, space to pause, q to quit.
 
 
 
-Credits:
+## Credits
+
 * Steven Goodwin's [C version](https://github.com/MarquisdeGeek/pacman) of the game.
 * Sound assets from Dale Harvey's [JS version](https://github.com/daleharvey/pacman)
 * Marquee text by [ChatGPT](https://chat.openai.com/)
