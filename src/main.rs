@@ -468,7 +468,7 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
     let mut death_frames_left: Option<usize> = None;
 
     loop {
-        let start = time::Instant::now();
+        let mut start = time::Instant::now();
 
         // adjust overall speed by level
         let base_speed = if flash_frames_left.is_some() {
@@ -496,15 +496,33 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
             thread::sleep(target_frame_time - start.elapsed());
         }
 
-        match tui::poll_input()? {
-            tui::InputEvent::Quit => return Ok(GameState::UserQuit),
-            tui::InputEvent::Pause => tui::pause(game)?,
-            tui::InputEvent::Resize => {
-                tui::clear_screen()?;
-                tui::render_game_info()?; // Re-draw titles and scores
+        // Drain all queued input: reading one event per frame falls behind
+        // key repeat (~30/s vs ~7 frames/s), so steering lags more and more.
+        // The first poll waits up to 10 ms, as before; the rest don't wait.
+        let mut timeout = time::Duration::from_millis(10);
+        let mut resized = false;
+        while let Some(event) = tui::poll_input(timeout)? {
+            timeout = time::Duration::ZERO;
+            match event {
+                tui::InputEvent::Quit => return Ok(GameState::UserQuit),
+                tui::InputEvent::Pause => {
+                    tui::pause(game)?;
+                    // time spent paused must not count as game time (it would
+                    // drain the power pill and fruit timers): make this frame
+                    // look like a normal one
+                    start = time::Instant::now()
+                        .checked_sub(target_frame_time)
+                        .unwrap_or_else(time::Instant::now);
+                }
+                tui::InputEvent::Resize => resized = true,
+                // several queued directions: the last one wins
+                tui::InputEvent::Direction(dir) => game.player.last_input_direction = dir,
+                _ => {}
             }
-            tui::InputEvent::Direction(dir) => game.player.last_input_direction = dir,
-            _ => {}
+        }
+        if resized {
+            tui::clear_screen()?;
+            tui::render_game_info()?; // Re-draw titles and scores
         }
 
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len(); // scroll marquee

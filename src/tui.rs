@@ -202,26 +202,28 @@ pub enum InputEvent {
     None,
 }
 
-pub fn poll_input() -> io::Result<InputEvent> {
-    if poll(Duration::from_millis(10))? {
-        match read()? {
-            Event::Key(key_event) if key_event.kind == event::KeyEventKind::Press => {
-                return Ok(match key_event.code {
-                    KeyCode::Char('q') => InputEvent::Quit,
-                    KeyCode::Char('v') => InputEvent::Cheat,
-                    KeyCode::Char(' ') => InputEvent::Pause,
-                    KeyCode::Left => InputEvent::Direction(Direction::Left),
-                    KeyCode::Right => InputEvent::Direction(Direction::Right),
-                    KeyCode::Up => InputEvent::Direction(Direction::Up),
-                    KeyCode::Down => InputEvent::Direction(Direction::Down),
-                    _ => InputEvent::None,
-                });
-            }
-            Event::Resize(_, _) => return Ok(InputEvent::Resize),
-            _ => {}
-        }
+/// Next pending input event, waiting up to `timeout` for one to arrive.
+/// `None`: nothing pending. `Some(InputEvent::None)`: an event we ignore.
+pub fn poll_input(timeout: Duration) -> io::Result<Option<InputEvent>> {
+    if !poll(timeout)? {
+        return Ok(None);
     }
-    Ok(InputEvent::None)
+    Ok(Some(match read()? {
+        Event::Key(key_event) if key_event.kind == event::KeyEventKind::Press => {
+            match key_event.code {
+                KeyCode::Char('q') => InputEvent::Quit,
+                KeyCode::Char('v') => InputEvent::Cheat,
+                KeyCode::Char(' ') => InputEvent::Pause,
+                KeyCode::Left => InputEvent::Direction(Direction::Left),
+                KeyCode::Right => InputEvent::Direction(Direction::Right),
+                KeyCode::Up => InputEvent::Direction(Direction::Up),
+                KeyCode::Down => InputEvent::Direction(Direction::Down),
+                _ => InputEvent::None,
+            }
+        }
+        Event::Resize(_, _) => InputEvent::Resize,
+        _ => InputEvent::None,
+    }))
 }
 
 pub fn pause(game: &Game) -> io::Result<()> {
