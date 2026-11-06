@@ -5,7 +5,7 @@ Pacman for the terminal.
 Has most of the game elements from the original game:
 * Ghosts go through 'shuffle' and 'chase' (💡) periods where they ignore/target pacman.
 * Ghosts flee pacman when frightened.
-* Ghosts slow down in the tunnel and when freightened.
+* Ghosts slow down in the tunnel and when frightened.
 * When eaten, ghost eyes trace a path back to the ghost house.
 * Two 'fruit' bonuses on every level.
 * Cornering.
