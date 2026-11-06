@@ -3,7 +3,7 @@
 Pacman for the terminal. 
 
 Has most of the game elements from the original game:
-* Ghosts go through 'shuffle' and 'chase' (💡) periods where they ignore/target pacman.
+* Ghosts alternate between 'scatter' (heads for their individual corners) and 'chase' (💡) periods.
 * Ghosts flee pacman when frightened.
 * Ghosts slow down in the tunnel and when frightened.
 * When eaten, ghost eyes trace a path back to the ghost house.
@@ -18,9 +18,12 @@ Mazes:
 Pacman is animated with ascii symbols and the ghosts with unicode codepoints (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
  Unicode has symbols for most of the fruit bonuses (🍒,🍓,🍑,🍎,🍇,🚀,🔔,🔑), but not for the ghosts themselves.
 
-Controls are on the arrow keys.
+Controls: Arrow keys to steer, space to pause, q to quit.
+
 ```
-% cargo run --release
+  git clone https://github.com/jesper-olsen/UniPac
+  cd UniPac
+  cargo run --release   # run from the repo root: Audio/ is loaded relative to the current directory
 ```
 
 ![Game UI](https://raw.githubusercontent.com/jesper-olsen/UniPac/main/Screenshot.png) 
