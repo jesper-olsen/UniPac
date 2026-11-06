@@ -193,6 +193,13 @@ pub fn draw_player<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     )
 }
 
+/// q, Esc or Ctrl-C. In raw mode Ctrl-C arrives as an ordinary key event
+/// rather than as a signal, so it has to be handled explicitly.
+fn is_quit(key: &event::KeyEvent) -> bool {
+    matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
+        || (key.code == KeyCode::Char('c') && key.modifiers.contains(event::KeyModifiers::CONTROL))
+}
+
 pub enum InputEvent {
     Direction(Direction),
     Quit,
@@ -211,7 +218,7 @@ pub fn poll_input(timeout: Duration) -> io::Result<Option<InputEvent>> {
     Ok(Some(match read()? {
         Event::Key(key_event) if key_event.kind == event::KeyEventKind::Press => {
             match key_event.code {
-                KeyCode::Char('q') => InputEvent::Quit,
+                _ if is_quit(&key_event) => InputEvent::Quit,
                 KeyCode::Char('v') => InputEvent::Cheat,
                 KeyCode::Char(' ') => InputEvent::Pause,
                 KeyCode::Left => InputEvent::Direction(Direction::Left),
@@ -226,16 +233,20 @@ pub fn poll_input(timeout: Duration) -> io::Result<Option<InputEvent>> {
     }))
 }
 
-pub fn pause(game: &Game) -> io::Result<()> {
+/// Blocks until unpaused. Returns true if the player asked to quit instead.
+pub fn pause(game: &Game) -> io::Result<bool> {
     let mut w = io::BufWriter::new(stdout());
     draw_message(&mut w, game, "PAUSED", false)?;
     loop {
         if let Ok(Event::Key(key_event)) = read() {
             // Filter out Release/Repeat events for Windows compatibility
-            if key_event.kind == crossterm::event::KeyEventKind::Press
-                && key_event.code == KeyCode::Char(' ')
-            {
-                return Ok(());
+            if key_event.kind == crossterm::event::KeyEventKind::Press {
+                if is_quit(&key_event) {
+                    return Ok(true);
+                }
+                if key_event.code == KeyCode::Char(' ') {
+                    return Ok(false);
+                }
             }
         }
     }
@@ -265,6 +276,7 @@ pub fn another_game(game: &mut Game) -> io::Result<bool> {
             match key_event.code {
                 KeyCode::Char('y' | 'Y') => return Ok(true),
                 KeyCode::Char('n' | 'N') => return Ok(false),
+                _ if is_quit(&key_event) => return Ok(false),
                 _ => (),
             }
         }

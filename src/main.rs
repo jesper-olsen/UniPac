@@ -506,7 +506,9 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
             match event {
                 tui::InputEvent::Quit => return Ok(GameState::UserQuit),
                 tui::InputEvent::Pause => {
-                    tui::pause(game)?;
+                    if tui::pause(game)? {
+                        return Ok(GameState::UserQuit);
+                    }
                     // time spent paused must not count as game time (it would
                     // drain the power pill and fruit timers): make this frame
                     // look like a normal one
