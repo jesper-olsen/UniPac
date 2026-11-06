@@ -95,7 +95,7 @@ impl Ghost {
                         | Square::Start
                 ) && (self.edible_duration > 0 || d != self.direction.opposite())
                 {
-                    Some((target.dist_city(p) as isize, d, p))
+                    Some((target.dist_sqr(p) as isize, d, p))
                 } else {
                     None
                 }
@@ -247,7 +247,9 @@ impl Game {
     fn ghosts_are_edible(&mut self, duration: u128) {
         for g in self.ghosts.iter_mut() {
             if matches!(g.state, GhostState::Outside | GhostState::Gateway) {
-                g.edible_duration += duration
+                // a pill eaten while ghosts are still frightened restarts the
+                // timer (as in the original) rather than adding to it
+                g.edible_duration = duration;
             }
         }
     }
@@ -265,7 +267,7 @@ impl Game {
                     self.next_ghost_score *= 2;
                     g.state = GhostState::Dead;
                     g.edible_duration = 0;
-                    self.am.play(Sound::EatGhost)?;
+                    self.am.play(Sound::EatGhost);
 
                     // flash message
                     let mut w = io::BufWriter::new(stdout());
@@ -277,33 +279,52 @@ impl Game {
         Ok(())
     }
 
-    fn update_ghosts(&mut self, telaps: u128) {
-        let scatter_target: [Position; 4] = [
-            Position::from_xy(2, 0),
-            Position::from_xy(self.board.width - 3, 0),
-            Position::from_xy(0, 24),
-            Position::from_xy(self.board.width - 1, self.board.height),
+    /// Target tiles for Pinky, Blinky, Inky & Clyde (in ghost index order):
+    /// (scatter targets, chase targets).
+    fn ghost_targets(&self) -> ([Position; 4], [Position; 4]) {
+        let (width, height) = (self.board.width, self.board.height);
+        let scatter_target = [
+            Position::from_xy(2, 0),              // Pinky: top left
+            Position::from_xy(width - 3, 0),      // Blinky: top right
+            Position::from_xy(width - 1, height), // Inky: bottom right
+            Position::from_xy(0, height),         // Clyde: bottom left
         ];
-        // Calc chase mode target pos for Pinky, Blinky, Inky & Clyde
-        let mut chase_target: [Position; 4] = [self.player.pos; 4];
-        // Pinky - target pacman
-        // Blinky - target 4 squares away from pacman
-        let (col, row) = (self.player.pos.col(), self.player.pos.row());
-        chase_target[1] = match self.player.moving {
-            Left => Position::from_xy(col.saturating_sub(4), row),
-            Right => Position::from_xy(std::cmp::min(col + 4, self.board.width - 1), row),
-            Up => Position::from_xy(col, row.saturating_sub(4)),
-            Down => Position::from_xy(col, row + 4),
+
+        // Targets may lie outside the maze in the original - clamp to the board
+        let tile = |col: i32, row: i32| {
+            Position::from_xy(
+                col.clamp(0, width as i32 - 1) as usize,
+                row.clamp(0, height as i32) as usize,
+            )
+        };
+        // the tile `n` ahead of pacman. When pacman moves up the original also
+        // shifts the tile `n` to the left (an overflow bug in the arcade code)
+        let (col, row) = (self.player.pos.col() as i32, self.player.pos.row() as i32);
+        let ahead = |n: i32| match self.player.moving {
+            Left => (col - n, row),
+            Right => (col + n, row),
+            Up => (col - n, row - n),
+            Down => (col, row + n),
         };
 
-        // Inky - target average of pacman pos and Blinky
-        chase_target[2] = self.player.pos.average(self.ghosts[1].pos);
-
+        let mut chase_target = [self.player.pos; 4];
+        // Blinky - target pacman
+        // Pinky - target 4 tiles ahead of pacman
+        let (c, r) = ahead(4);
+        chase_target[0] = tile(c, r);
+        // Inky - twice the vector from Blinky to the tile 2 ahead of pacman
+        let (c, r) = ahead(2);
+        let blinky = self.ghosts[1].pos;
+        chase_target[2] = tile(2 * c - blinky.col() as i32, 2 * r - blinky.row() as i32);
         // Clyde - retreat to corner if close to pacman
         if self.player.pos.dist_sqr(self.ghosts[3].pos) < 64 {
             chase_target[3] = scatter_target[3]
         }
+        (scatter_target, chase_target)
+    }
 
+    fn update_ghosts(&mut self, telaps: u128) {
+        let (scatter_target, chase_target) = self.ghost_targets();
         let current_period = self.period();
         for (gidx, g) in self.ghosts.iter_mut().enumerate() {
             g.edible_duration = g.edible_duration.saturating_sub(telaps);
@@ -372,14 +393,14 @@ impl Game {
                 self.board[pos] = Square::Empty;
             }
             Square::Pill => {
-                self.am.play(Sound::EatPill)?;
+                self.am.play(Sound::EatPill);
                 self.board[pos] = Square::Empty;
                 self.ghosts_are_edible(self.pill_duration);
                 self.score += 50;
                 self.next_ghost_score = 200;
             }
             Square::Fruit if self.fruit_duration > 0 => {
-                self.am.play(Sound::EatPill)?;
+                self.am.play(Sound::EatPill);
                 let bonus = self.bonus().value();
                 self.score += bonus;
                 self.fruit_duration = 0;
@@ -417,7 +438,7 @@ impl Game {
 
         if prev_score < 10000 && self.score >= 10000 && self.lives < MAX_PACMAN_LIVES {
             self.lives += 1;
-            self.am.play(Sound::ExtraLives)?;
+            self.am.play(Sound::ExtraLives);
         }
 
         if self.score > self.high_score {
@@ -555,12 +576,12 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
             tui::draw_dynamic(game)?;
 
             if game.player.dead {
-                game.am.play(Sound::Die)?;
+                game.am.play(Sound::Die);
                 death_frames_left = Some(12); // Start 12-frame death animation
             }
 
             if game.dots_left == 0 {
-                game.am.play(Sound::OpeningSong)?;
+                game.am.play(Sound::OpeningSong);
                 flash_frames_left = Some(10);
             }
 
@@ -591,4 +612,48 @@ fn main() -> io::Result<()> {
         }
     }
     tui::close_render()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn xy(p: Position) -> (usize, usize) {
+        (p.col(), p.row())
+    }
+
+    #[test]
+    fn ghost_targets() {
+        let mut g = Game::new();
+        let (w, h) = (g.board.width, g.board.height);
+        g.player.pos = Position::from_xy(10, 10);
+        g.ghosts[1].pos = Position::from_xy(8, 12); // Blinky
+        g.ghosts[3].pos = Position::from_xy(10, 25); // Clyde, far away
+
+        let (scatter, _) = g.ghost_targets();
+        let corners = [(2, 0), (w - 3, 0), (w - 1, h), (0, h)];
+        assert_eq!(scatter.map(xy), corners);
+
+        g.player.moving = Right;
+        let (_, chase) = g.ghost_targets();
+        assert_eq!(xy(chase[1]), (10, 10)); // Blinky: pacman
+        assert_eq!(xy(chase[0]), (14, 10)); // Pinky: 4 ahead
+        assert_eq!(xy(chase[2]), (16, 8)); // Inky: 2*(12,10) - (8,12)
+        assert_eq!(xy(chase[3]), (10, 10)); // Clyde: pacman when far away
+
+        g.player.moving = Up; // the arcade overflow bug: also shifted left
+        let (_, chase) = g.ghost_targets();
+        assert_eq!(xy(chase[0]), (6, 6));
+        assert_eq!(xy(chase[2]), (2 * 8 - 8, 2 * 8 - 12));
+
+        g.ghosts[3].pos = Position::from_xy(12, 12); // Clyde within 8 tiles
+        let (_, chase) = g.ghost_targets();
+        assert_eq!(xy(chase[3]), (0, h)); // retreats to its own corner
+
+        // bottom corners follow the board height, not a fixed row
+        g.board = Board::new(1);
+        let (scatter, _) = g.ghost_targets();
+        assert_eq!(xy(scatter[2]), (w - 1, g.board.height));
+        assert_eq!(xy(scatter[3]), (0, g.board.height));
+    }
 }

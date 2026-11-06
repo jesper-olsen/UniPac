@@ -38,19 +38,8 @@ impl Position {
         self.0 / WIDTH
     }
 
-    pub const fn dist_city(&self, other: Position) -> usize {
-        self.col().abs_diff(other.col()) + self.row().abs_diff(other.row())
-    }
-
     pub const fn dist_sqr(&self, other: Position) -> usize {
         self.col().abs_diff(other.col()).pow(2) + self.row().abs_diff(other.row()).pow(2)
-    }
-
-    pub const fn average(&self, other: Position) -> Position {
-        Position::from_xy(
-            (self.col() + other.col()) / 2,
-            (self.row() + other.row()) / 2,
-        )
     }
 
     pub const fn go(&self, direction: Direction) -> Position {
