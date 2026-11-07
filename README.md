@@ -22,7 +22,7 @@ cargo install --git https://github.com/jesper-olsen/UniPac
 unipac
 ```
 
-Or from a clone: `cargo run --release`. `--level N` starts on level N: 0 is the shortened maze, 1 the regular one, 2-5 the Ms Pacman mazes.
+Or from a clone: `cargo run --release`. `--level N` starts on level N: 1 is the shortened maze, 2 the regular one, 3-6 the Ms Pacman mazes.
 
 On Debian/Ubuntu, building needs `sudo apt install libasound2-dev libdbus-1-dev pkg-config`. Sound is optional: without an audio device the game runs silent.
 

@@ -238,9 +238,11 @@ pub fn pause(game: &Game) -> io::Result<bool> {
     let mut w = io::BufWriter::new(stdout());
     draw_message(&mut w, game, "PAUSED", false)?;
     loop {
-        if let Ok(Event::Key(key_event)) = read() {
+        match read() {
             // Filter out Release/Repeat events for Windows compatibility
-            if key_event.kind == crossterm::event::KeyEventKind::Press {
+            Ok(Event::Key(key_event))
+                if key_event.kind == crossterm::event::KeyEventKind::Press =>
+            {
                 if is_quit(&key_event) {
                     return Ok(true);
                 }
@@ -248,6 +250,11 @@ pub fn pause(game: &Game) -> io::Result<bool> {
                     return Ok(false);
                 }
             }
+            Ok(Event::Resize(_, _)) => {
+                redraw(game)?;
+                draw_message(&mut w, game, "PAUSED", false)?;
+            }
+            _ => (),
         }
     }
 }
@@ -261,29 +268,41 @@ pub fn another_game(game: &mut Game) -> io::Result<bool> {
         draw_marquee(&mut w, game)?;
         crossterm::queue!(
             w,
-            cursor::MoveTo(centered_x(s1), 12),
+            cursor::MoveTo(centered_x(s1), PROMPT_ROW),
             style::PrintStyledContent(s1.red()),
-            cursor::MoveTo(centered_x(s2), 14),
+            cursor::MoveTo(centered_x(s2), PROMPT_ROW + 2),
             style::PrintStyledContent(s2.red()),
         )?;
         w.flush()?;
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len();
 
-        if poll(Duration::from_millis(120))?
-            && let Ok(Event::Key(key_event)) = read()
-            && key_event.kind == crossterm::event::KeyEventKind::Press
-        {
-            match key_event.code {
-                KeyCode::Char('y' | 'Y') => return Ok(true),
-                KeyCode::Char('n' | 'N') => return Ok(false),
-                _ if is_quit(&key_event) => return Ok(false),
+        if poll(Duration::from_millis(120))? {
+            match read() {
+                Ok(Event::Key(key_event))
+                    if key_event.kind == crossterm::event::KeyEventKind::Press =>
+                {
+                    match key_event.code {
+                        KeyCode::Char('y' | 'Y') => return Ok(true),
+                        KeyCode::Char('n' | 'N') => return Ok(false),
+                        _ if is_quit(&key_event) => return Ok(false),
+                        _ => (),
+                    }
+                }
+                Ok(Event::Resize(_, _)) => {
+                    redraw(game)?;
+                    draw_game_over(game)?;
+                }
                 _ => (),
             }
         }
     }
 }
 
+const TITLE: [&str; 3] = ["UniPac", "Terminal Pac-Man", "Rusty Edition 2026"];
 const CONTROLS: [&str; 3] = ["Move   : arrows", "Pause  : space", "Quit   : q / Esc"];
+// rows of the right-hand panel: info block ends on row 11
+const PROMPT_ROW: u16 = 14; // 'Another game?' and 'Y/N' on this row and 2 below
+const CONTROLS_ROW: u16 = 19;
 
 /// Left edge of the text block in the right-hand panel: centred on its widest line,
 /// so that no line runs past the edge of an 80 column terminal.
@@ -293,9 +312,7 @@ fn panel_x() -> u16 {
 
 pub fn render_game_info() -> io::Result<()> {
     // the panel right of the maze is 22 columns wide in an 80 column terminal
-    let s1: &str = "UniPac";
-    let s2 = "Unicode-powered Pacman";
-    let s3 = "Rusty Edition 2025";
+    let [s1, s2, s3] = TITLE;
 
     crossterm::queue!(
         stdout(),
@@ -307,11 +324,11 @@ pub fn render_game_info() -> io::Result<()> {
         cursor::MoveTo(centered_x(s3), 3),
         style::PrintStyledContent(s3.yellow()),
     )?;
-    // below the 'Another game?' prompt (rows 12 and 14)
+    // below the 'Another game?' prompt
     for (n, s) in CONTROLS.iter().enumerate() {
         crossterm::queue!(
             stdout(),
-            cursor::MoveTo(panel_x(), 17 + n as u16),
+            cursor::MoveTo(panel_x(), CONTROLS_ROW + n as u16),
             style::PrintStyledContent(s.grey()),
         )?;
     }
@@ -347,11 +364,10 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     //     }
     // }
 
-    // the light bulb is an emoji (2 cells) - both variants are 9 cells wide
-    let (mode, bulb) = if game.period() == Period::Chase {
-        ("chase", "\u{1F4A1}")
+    let mode = if game.period() == Period::Chase {
+        "chase"
     } else {
-        ("scatter", "  ")
+        "scatter"
     };
 
     let i = panel_x();
@@ -366,7 +382,7 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         cursor::MoveTo(i, 9),
         style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
         cursor::MoveTo(i, 11),
-        style::PrintStyledContent(format!("Ghosts : {mode:<7}{bulb}").bold().white()),
+        style::PrintStyledContent(format!("Ghosts : {mode:<7}").bold().white()),
     )?;
     draw_message_at(
         w,
@@ -406,6 +422,18 @@ fn draw_marquee<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     }
 }
 
+/// Repaints everything - the terminal has lost or reflowed the screen, e.g. after a resize.
+fn redraw(game: &Game) -> io::Result<()> {
+    clear_screen()?;
+    render_game_info()?;
+    draw_dynamic(game)
+}
+
+pub fn draw_game_over(game: &Game) -> io::Result<()> {
+    let mut w = io::BufWriter::new(stdout());
+    draw_message(&mut w, game, "GAME  OVER", true)
+}
+
 pub fn clear_screen() -> io::Result<()> {
     crossterm::queue!(stdout(), terminal::Clear(terminal::ClearType::All))
 }
@@ -443,6 +471,13 @@ mod tests {
             assert!(format!("Maze   : {name}").len() <= widest, "{name}");
         }
         assert!(CONTROLS.iter().all(|s| s.len() <= widest));
-        assert!("Ghosts : scatter  ".len() <= widest);
+        assert!("Ghosts : scatter".len() <= widest);
+    }
+
+    #[test]
+    fn title_fits_the_panel() {
+        // the panel right of the maze, in an 80 column terminal
+        let panel = 80 - (sx(WIDTH) as usize + 2);
+        assert!(TITLE.iter().all(|s| s.len() <= panel), "{TITLE:?}");
     }
 }

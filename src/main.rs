@@ -10,9 +10,15 @@ use audio::{AM, Sound};
 use board::{Board, Direction, Direction::*, Position, Square};
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "UniPac - Tui pacman", long_about = None)]
+#[command(author, version, about = "UniPac - Pac-Man for the terminal", long_about = None)]
 struct Config {
-    #[arg(short, long, help = "Level", default_value_t = 0)]
+    #[arg(
+        short,
+        long,
+        help = "Start level: 1 shortened maze, 2 regular maze, 3-6 Ms Pac-Man mazes",
+        default_value_t = 1,
+        value_parser = clap::value_parser!(u32).range(1..)
+    )]
     level: u32,
 }
 
@@ -493,8 +499,7 @@ impl Game {
                 }
             };
         }
-        let mut w = io::BufWriter::new(stdout());
-        tui::draw_message(&mut w, self, "GAME  OVER", true)
+        tui::draw_game_over(self)
     }
 } // impl Game
 
@@ -621,7 +626,7 @@ fn main() -> io::Result<()> {
 
     tui::init_render()?;
     loop {
-        let mut game = Game::new(args.level);
+        let mut game = Game::new(args.level - 1); // levels are 1-based on the command line and in the panel
         game.run()?;
         if !tui::another_game(&mut game)? {
             break;
@@ -640,7 +645,7 @@ mod tests {
 
     #[test]
     fn ghost_targets() {
-        let mut g = Game::new();
+        let mut g = Game::default();
         let (w, h) = (g.board.width, g.board.height);
         g.player.pos = Position::from_xy(10, 10);
         g.ghosts[1].pos = Position::from_xy(8, 12); // Blinky
