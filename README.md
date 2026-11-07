@@ -22,11 +22,12 @@ Pacman is animated with ascii symbols and the ghosts with unicode codepoints (Pi
 
 Arrow keys to steer, space to pause, q to quit.
 
+
 ## Build and run
 ```
   git clone https://github.com/jesper-olsen/UniPac
   cd UniPac
-  cargo run --release   # run from the repo root: Audio/ is loaded relative to the current directory
+  cargo run --release  
 ```
 
 ![Game UI](demo.gif) 
