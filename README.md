@@ -1,38 +1,34 @@
-# UniPac: Unicode-powered pacman adventure 
+# UniPac
 
-Pacman for the terminal. 
+Pac-Man for the terminal, in Rust.
 
-Has most of the game elements from the original game:
-* Ghosts alternate between 'scatter' (heads for their individual corners) and 'chase' (💡) periods.
-* Ghosts flee pacman when frightened.
-* Ghosts slow down in the tunnel and when frightened.
+![UniPac demo](demo.gif)
+
+* Ghosts alternate between 'scatter' (each heads for its own corner) and 'chase' periods, each with its original targeting.
+* Ghosts flee pacman when frightened, and slow down in the tunnel and when frightened.
 * When eaten, ghost eyes trace a path back to the ghost house.
 * Two 'fruit' bonuses on every level.
-* Cornering.
+* Cornering: steer early and pacman takes the first opening.
+* Mazes: shortened pacman maze (24 rows), regular pacman maze (29 rows) and 4 Ms Pacman mazes (31 rows).
 
-Mazes:
-* Shortened pacman maze (24 rows).
-* Regular pacman maze (29 rows).
-* 4 Ms Pacman mazes (31 rows).
+Pacman is animated with ASCII symbols, the ghosts and fruit with emoji (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃 - Unicode has no ghost symbol). Emoji are two columns wide, so each maze tile is too.
 
-Pacman is animated with ascii symbols and the ghosts with unicode codepoints (Pinky 👺, Blinky 👹, Inky 👻, Clyde 🎃); 
- Unicode has symbols for most of the fruit bonuses (🍒,🍓,🍑,🍎,🍇,🚀,🔔,🔑), but not for the ghosts themselves.
+## Run
+
+Needs Rust 1.88+ and a terminal with emoji support, at least 80 columns wide and 33 rows tall.
+
+```
+cargo install --git https://github.com/jesper-olsen/UniPac
+unipac
+```
+
+Or from a clone: `cargo run --release`. `--level N` starts on level N: 0 is the shortened maze, 1 the regular one, 2-5 the Ms Pacman mazes.
+
+On Debian/Ubuntu, building needs `sudo apt install libasound2-dev libdbus-1-dev pkg-config`. Sound is optional: without an audio device the game runs silent.
 
 ## Controls
 
-Arrow keys to steer, space to pause, q to quit.
-
-
-## Build and run
-```
-  git clone https://github.com/jesper-olsen/UniPac
-  cd UniPac
-  cargo run --release  
-```
-
-![Game UI](demo.gif) 
-
-
+Arrow keys to steer, space to pause, q or Esc to quit.
 
 ## Credits
 
