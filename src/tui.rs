@@ -283,6 +283,14 @@ pub fn another_game(game: &mut Game) -> io::Result<bool> {
     }
 }
 
+const CONTROLS: [&str; 3] = ["Move   : arrows", "Pause  : space", "Quit   : q / Esc"];
+
+/// Left edge of the text block in the right-hand panel: centred on its widest line,
+/// so that no line runs past the edge of an 80 column terminal.
+fn panel_x() -> u16 {
+    centered_x("Maze   : Light Blue")
+}
+
 pub fn render_game_info() -> io::Result<()> {
     // the panel right of the maze is 22 columns wide in an 80 column terminal
     let s1: &str = "UniPac";
@@ -298,7 +306,16 @@ pub fn render_game_info() -> io::Result<()> {
         style::PrintStyledContent(s2.cyan()),
         cursor::MoveTo(centered_x(s3), 3),
         style::PrintStyledContent(s3.yellow()),
-    )
+    )?;
+    // below the 'Another game?' prompt (rows 12 and 14)
+    for (n, s) in CONTROLS.iter().enumerate() {
+        crossterm::queue!(
+            stdout(),
+            cursor::MoveTo(panel_x(), 17 + n as u16),
+            style::PrintStyledContent(s.grey()),
+        )?;
+    }
+    Ok(())
 }
 
 pub fn draw_death_frame<W: io::Write>(w: &mut W, game: &Game, frame_idx: usize) -> io::Result<()> {
@@ -330,18 +347,14 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
     //     }
     // }
 
-    let s = if game.period() == Period::Chase {
-        "\u{1F4A1}" // light bulb
+    // the light bulb is an emoji (2 cells) - both variants are 9 cells wide
+    let (mode, bulb) = if game.period() == Period::Chase {
+        ("chase", "\u{1F4A1}")
     } else {
-        "  "
+        ("scatter", "  ")
     };
-    crossterm::queue!(
-        w,
-        cursor::MoveTo(sx(game.board.width) + 2, game.board.height as u16 - 1),
-        style::Print(s)
-    )?;
 
-    let i = centered_x("Score : 123456"); // get a pos base on av score digits
+    let i = panel_x();
     crossterm::queue!(
         w,
         cursor::MoveTo(i, 5),
@@ -352,6 +365,8 @@ pub fn render_rhs<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         style::PrintStyledContent(format!("High   : {}", game.high_score).bold().white()),
         cursor::MoveTo(i, 9),
         style::PrintStyledContent(format!("Level  : {}", game.level + 1).bold().white()),
+        cursor::MoveTo(i, 11),
+        style::PrintStyledContent(format!("Ghosts : {mode:<7}{bulb}").bold().white()),
     )?;
     draw_message_at(
         w,
@@ -413,4 +428,21 @@ pub fn draw_ghosts<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::board::Board;
+
+    #[test]
+    fn panel_lines_fit_the_widest() {
+        let widest = "Maze   : Light Blue".len();
+        for level in 0..8 {
+            let name = Board::new(level).maze_name;
+            assert!(format!("Maze   : {name}").len() <= widest, "{name}");
+        }
+        assert!(CONTROLS.iter().all(|s| s.len() <= widest));
+        assert!("Ghosts : scatter  ".len() <= widest);
+    }
 }

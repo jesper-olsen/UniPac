@@ -1,3 +1,4 @@
+use clap::Parser;
 use std::io::{self, Write, stdout};
 use std::{thread, time};
 
@@ -7,6 +8,13 @@ mod maze;
 mod tui;
 use audio::{AM, Sound};
 use board::{Board, Direction, Direction::*, Position, Square};
+
+#[derive(Parser, Debug)]
+#[command(author, version, about = "UniPac - Tui pacman", long_about = None)]
+struct Config {
+    #[arg(short, long, help = "Level", default_value_t = 0)]
+    level: u32,
+}
 
 static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man. \
     Scene: A quiet garden in Athens. Plato and Socrates sit on a stone bench, discussing the nature of games. \
@@ -182,9 +190,15 @@ impl Fruit {
     }
 }
 
-impl Game {
-    fn new() -> Self {
+impl Default for Game {
+    fn default() -> Self {
         let level = 0u32;
+        Game::new(level)
+    }
+}
+
+impl Game {
+    fn new(level: u32) -> Self {
         let board = Board::new(level);
         let player = Player::new(board.pacman_start);
         let mut game = Game {
@@ -595,6 +609,8 @@ fn game_loop(game: &mut Game) -> io::Result<GameState> {
 }
 
 fn main() -> io::Result<()> {
+    let args = Config::parse();
+
     // make sure crossterm doesn't leave the terminal in a raw state in case of panics
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
@@ -605,7 +621,7 @@ fn main() -> io::Result<()> {
 
     tui::init_render()?;
     loop {
-        let mut game = Game::new();
+        let mut game = Game::new(args.level);
         game.run()?;
         if !tui::another_game(&mut game)? {
             break;

@@ -29,7 +29,7 @@ Arrow keys to steer, space to pause, q to quit.
   cargo run --release   # run from the repo root: Audio/ is loaded relative to the current directory
 ```
 
-![Game UI](https://raw.githubusercontent.com/jesper-olsen/UniPac/main/Screenshot.png) 
+![Game UI](demo.gif) 
 
 
 
