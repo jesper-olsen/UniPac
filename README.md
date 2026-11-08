@@ -4,6 +4,8 @@ Pac-Man for the terminal, in Rust.
 
 ![UniPac demo](demo.gif)
 
+## Features
+
 * Ghosts alternate between 'scatter' (each heads for its own corner) and 'chase' periods, each with its original targeting.
 * Ghosts flee pacman when frightened, and slow down in the tunnel and when frightened.
 * When eaten, ghost eyes trace a path back to the ghost house.
@@ -26,11 +28,13 @@ Or from a clone: `cargo run --release`. `--level N` starts on level N: 1 is the 
 
 On Debian/Ubuntu, building needs `sudo apt install libasound2-dev libdbus-1-dev pkg-config`. Sound is optional: without an audio device the game runs silent.
 
+The high score is saved between runs, in `~/.local/share/unipac` on Linux and `~/Library/Application Support/unipac` on macOS.
+
+
 ## Controls
 
 Arrow keys to steer, space to pause, q or Esc to quit.
 
-The high score is saved between runs, in `~/.local/share/unipac` on Linux and `~/Library/Application Support/unipac` on macOS.
 
 ## Credits
 
