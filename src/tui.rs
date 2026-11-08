@@ -57,12 +57,32 @@ pub fn close_render() -> io::Result<()> {
     terminal::disable_raw_mode()
 }
 
-pub fn centered_x(s: &str) -> u16 {
+fn term_cols() -> u16 {
+    terminal::size().map(|(c, _)| c).unwrap_or(80)
+}
+
+/// Start column for `s` centred in the right-hand panel of a terminal `cols` wide.
+fn centered_in(cols: u16, s: &str) -> u16 {
     let leftedge: u16 = sx(WIDTH) + 2;
-    let cols = terminal::size().map(|(c, _)| c).unwrap_or(80);
     let n: u16 = s.len() as u16;
     let offset = cols.saturating_sub(leftedge).saturating_sub(n) / 2;
     offset + leftedge
+}
+
+/// Column of the ':' in the info block ("Score  : 70").
+fn colon_in(cols: u16) -> u16 {
+    centered_in(cols, WIDEST_INFO) + 7
+}
+
+/// Start column for `s` centred over the ':' column, so that titles line up with the
+/// info block whatever the terminal width. Stays clear of the maze.
+fn over_colon_in(cols: u16, s: &str) -> u16 {
+    let n: u16 = s.len() as u16;
+    colon_in(cols).saturating_sub(n / 2).max(sx(WIDTH) + 1)
+}
+
+fn over_colon(s: &str) -> u16 {
+    over_colon_in(term_cols(), s)
 }
 
 pub fn draw_message<W: Write>(w: &mut W, game: &Game, s: &str, blink: bool) -> io::Result<()> {
@@ -268,9 +288,9 @@ pub fn another_game(game: &mut Game) -> io::Result<bool> {
         draw_marquee(&mut w, game)?;
         crossterm::queue!(
             w,
-            cursor::MoveTo(centered_x(s1), PROMPT_ROW),
+            cursor::MoveTo(over_colon(s1), PROMPT_ROW),
             style::PrintStyledContent(s1.red()),
-            cursor::MoveTo(centered_x(s2), PROMPT_ROW + 2),
+            cursor::MoveTo(over_colon(s2), PROMPT_ROW + 2),
             style::PrintStyledContent(s2.red()),
         )?;
         w.flush()?;
@@ -298,6 +318,7 @@ pub fn another_game(game: &mut Game) -> io::Result<bool> {
     }
 }
 
+const WIDEST_INFO: &str = "Maze   : Light Blue"; // the widest line of the info block
 const TITLE: [&str; 3] = ["UniPac", "Terminal Pac-Man", "Rusty Edition 2026"];
 const CONTROLS: [&str; 3] = ["Move   : arrows", "Pause  : space", "Quit   : q / Esc"];
 // rows of the right-hand panel: info block ends on row 11
@@ -307,7 +328,7 @@ const CONTROLS_ROW: u16 = 19;
 /// Left edge of the text block in the right-hand panel: centred on its widest line,
 /// so that no line runs past the edge of an 80 column terminal.
 fn panel_x() -> u16 {
-    centered_x("Maze   : Light Blue")
+    centered_in(term_cols(), WIDEST_INFO)
 }
 
 pub fn render_game_info() -> io::Result<()> {
@@ -317,11 +338,11 @@ pub fn render_game_info() -> io::Result<()> {
     crossterm::queue!(
         stdout(),
         terminal::Clear(terminal::ClearType::All),
-        cursor::MoveTo(centered_x(s1), 1),
+        cursor::MoveTo(over_colon(s1), 1),
         style::PrintStyledContent(s1.cyan()),
-        cursor::MoveTo(centered_x(s2), 2),
+        cursor::MoveTo(over_colon(s2), 2),
         style::PrintStyledContent(s2.cyan()),
-        cursor::MoveTo(centered_x(s3), 3),
+        cursor::MoveTo(over_colon(s3), 3),
         style::PrintStyledContent(s3.yellow()),
     )?;
     // below the 'Another game?' prompt
@@ -465,13 +486,28 @@ mod tests {
 
     #[test]
     fn panel_lines_fit_the_widest() {
-        let widest = "Maze   : Light Blue".len();
+        let widest = WIDEST_INFO.len();
         for level in 0..8 {
             let name = Board::new(level).maze_name;
             assert!(format!("Maze   : {name}").len() <= widest, "{name}");
         }
         assert!(CONTROLS.iter().all(|s| s.len() <= widest));
         assert!("Ghosts : scatter".len() <= widest);
+    }
+
+    #[test]
+    fn titles_are_centred_over_the_colon() {
+        for cols in 80..=200 {
+            for s in TITLE {
+                let x = over_colon_in(cols, s);
+                assert_eq!(
+                    x + s.len() as u16 / 2,
+                    colon_in(cols),
+                    "{s} at {cols} columns"
+                );
+                assert!(x + s.len() as u16 <= cols);
+            }
+        }
     }
 
     #[test]
