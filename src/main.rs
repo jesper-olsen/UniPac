@@ -4,6 +4,7 @@ use std::{thread, time};
 
 mod audio;
 mod board;
+mod highscore;
 mod maze;
 mod tui;
 use audio::{AM, Sound};
@@ -215,7 +216,7 @@ impl Game {
             level,
             board,
             dots_left: 0,
-            high_score: 9710,
+            high_score: highscore::load(),
             lives: 3,
             player,
             fruit_duration: 0,
@@ -499,6 +500,7 @@ impl Game {
                 }
             };
         }
+        highscore::save(self.high_score);
         tui::draw_game_over(self)
     }
 } // impl Game

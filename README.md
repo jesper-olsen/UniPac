@@ -30,6 +30,8 @@ On Debian/Ubuntu, building needs `sudo apt install libasound2-dev libdbus-1-dev 
 
 Arrow keys to steer, space to pause, q or Esc to quit.
 
+The high score is saved between runs, in `~/.local/share/unipac` on Linux and `~/Library/Application Support/unipac` on macOS.
+
 ## Credits
 
 * Steven Goodwin's [C version](https://github.com/MarquisdeGeek/pacman) of the game.
