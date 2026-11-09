@@ -23,24 +23,49 @@ struct Config {
     level: u32,
 }
 
-static MARQUEE: &str = "Title: A Dialogue Between Plato and Socrates on Pac-Man. \
-    Scene: A quiet garden in Athens. Plato and Socrates sit on a stone bench, discussing the nature of games. \
-    Socrates: Tell me, Plato, have you observed this peculiar game known as Pac-Man? \
-    Plato: I have heard of it, Socrates, though I confess I do not fully grasp its essence. \
-    Socrates: It is a game in which a small, ever-hungry being, pursued by ghosts, traverses a maze, consuming pellets for sustenance. \
-    Plato: A curious notion! But tell me, Socrates, what wisdom is to be found in such a pursuit? \
-    Socrates: Ah, my dear Plato, is it not the case that in life we, too, navigate a labyrinth filled with obstacles, ever striving for fulfillment, yet always pursued by unseen forces? \
-    Plato: You suggest that the game is an allegory for the human condition? \
-    Socrates: Indeed. Consider the ghosts, are they not akin to our fears and regrets, which chase us through the corridors of existence? Yet, when Pac-Man finds the mighty Power Pellet, he turns upon his pursuers. Is this not a lesson in courage? That with wisdom and preparation, we may face our fears and render them powerless? \
-    Plato: A compelling thought, Socrates. Yet, the maze itself, does it not resemble my own theory of forms? For within the cave of the game screen, shadows flicker, but the true reality, the ideal Pac-Man, exists beyond it. \
-    Socrates: You imply that what we see on the screen is but an imitation of a higher truth? \
-    Plato: Precisely! The game is but a shadow of the true game, an ideal form where every move is perfect, every strategy divine. \
-    Socrates: And yet, Plato, if the game is but an imitation, does that make the pursuit meaningless? Or is it, rather, a reflection of the soul's journey, ever striving for perfection but constrained by its mortal form? \
-    Plato: I see now, Socrates! Pac-Man is not merely a game, it is philosophy in motion. The wise player, like the philosopher, must understand the patterns of the maze, anticipate the movements of fate, and seize opportunity when it appears. \
-    Socrates: You have grasped it well, my friend. But tell me-shall we now play a round and test our understanding in practice? \
-    Plato: Only if you promise not to engage me in paradoxes while I concentrate! \
-    (They both laugh as they rise, their discourse having brought them to a newfound appreciation of both wisdom and play.) \
-    Fin.";
+static MARQUEE: &str = "Title: Plato and Socrates Discuss Pac-Man. \
+    Scene: A garden in Athens. Plato and Socrates sit beneath an olive tree. \
+    Socrates: Tell me, Plato, have you played this curious game called Pac-Man? \
+    Plato: I have observed it. A yellow creature wanders through a maze, pursued by four ghosts. \
+    Socrates: And what does it seek? \
+    Plato: Pellets, apparently. It seems to have a rather limited ambition. \
+    Socrates: And yet it pursues this ambition relentlessly. Is that not true of most men? \
+    Plato: Perhaps. But surely there is more to the game than eating pellets? \
+    Socrates: There are also ghosts. \
+    Plato: Yes, I noticed. They seem rather hostile. \
+    Socrates: Would you say they are evil? \
+    Plato: They pursue Pac-Man without mercy. What else could they be? \
+    Socrates: And if Pac-Man pursues pellets without mercy, is he not equally guilty? \
+    Plato: You are suggesting that the distinction between hero and villain is merely a matter of perspective? \
+    Socrates: I suggest only that we should examine our assumptions. \
+    Plato: Then let us consider the maze. Surely it is an imitation of a perfect maze, an imperfect shadow of its ideal Form. \
+    Socrates: And where might one find this perfect maze? \
+    Plato: In the realm of Forms, naturally. \
+    Socrates: Does it contain ghosts? \
+    Plato: I should think not. \
+    Socrates: Then how can it be a perfect Pac-Man maze? \
+    Plato: You are being deliberately difficult. \
+    Socrates: I am merely asking questions. \
+    Plato: Consider the Power Pellet! It transforms Pac-Man from prey into predator. Surely this demonstrates that power is the foundation of justice? \
+    Socrates: Or perhaps that the ghosts were never so frightening as we imagined. Tell me, does Pac-Man become wiser when he eats one? \
+    Plato: No, merely more dangerous. \
+    Socrates: Then perhaps power and wisdom are not the same thing. \
+    Plato: You make even a simple game sound complicated. \
+    Socrates: Is that not what philosophy is for? \
+    Plato: But surely there is an ideal strategy, a sequence of perfect moves that guarantees victory? \
+    Socrates: If a man memorises every move but cannot explain why he makes them, does he understand the game? \
+    Plato: He knows how to win. \
+    Socrates: I asked whether he understands it. \
+    Plato: Must we distinguish between knowing and understanding even in Pac-Man? \
+    Socrates: Especially in Pac-Man. \
+    Plato: Very well. Let us play, and discover the truth for ourselves. \
+    Socrates: An excellent suggestion. But you must promise not to blame the ghosts when you lose. \
+    Plato: And you must promise not to question me while I am playing. \
+    Socrates: Then I shall ask only one question: why did you turn left? \
+    Plato: Oh, be quiet, Socrates! \
+    (They sit before the game. Plato loses his first life almost immediately.) \
+    Socrates: I see we have discovered another Form: the ideal player, who exists only in theory. \
+    Fin.   "; 
 
 const MAX_PACMAN_LIVES: u32 = 6;
 fn pct(n: u8) -> bool {
