@@ -53,9 +53,10 @@ enum GameState {
     LifeLost,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum GhostState {
-    Home,
+    Home,    // waiting in the ghost house
+    Leaving, // released: on its way to the gate
     Gateway,
     Outside,
     Dead,
@@ -67,15 +68,32 @@ struct Ghost {
     state: GhostState,
     edible_duration: u128,
     direction: Direction,
+    exit_right: bool, // leave the house to the right: the mode changed while waiting inside
+    bob_ms: u128,     // time since a ghost waiting in the house last moved
 }
 
+// Pinky, Blinky, Inky & Clyde: index into Game::ghosts and Board::ghost_start
+const PINKY: usize = 0;
+const BLINKY: usize = 1;
+const INKY: usize = 2;
+const CLYDE: usize = 3;
+// Which waiting ghost leaves first, and whose dot counter is running
+const LEAVING_ORDER: [usize; 3] = [PINKY, INKY, CLYDE];
+// A ghost waiting in the house moves up or down one row this often
+const BOB_MS: u128 = 300;
+
 impl Ghost {
-    const fn new(pos: Position) -> Self {
+    const fn new(pos: Position, state: GhostState) -> Self {
         Ghost {
             pos,
-            direction: Left,
+            direction: match state {
+                GhostState::Home => Up, // bobbing up and down
+                _ => Left,
+            },
             edible_duration: 0,
-            state: GhostState::Home,
+            state,
+            exit_right: false,
+            bob_ms: 0,
         }
     }
 
@@ -157,6 +175,11 @@ struct Game {
     player: Player,
     level: u32,
     ghosts: [Ghost; 4],
+    // Rules for when ghosts leave the house (as in the arcade game):
+    dot_counters: [u32; 4], // dots eaten while a ghost was first in line to leave
+    global_counter: Option<u32>, // replaces the personal counters after a life is lost
+    dot_timer: u128,        // time since pacman last ate a dot
+    last_period: Period,    // to notice when the mode changes
     pill_duration: u128,
     fruit_duration: u128,
     next_ghost_score: u32,
@@ -211,7 +234,11 @@ impl Game {
         let mut game = Game {
             timecum: 0,
             mq_idx: 0,
-            ghosts: [Ghost::new(Position::from_xy(0, 0)); 4],
+            ghosts: [Ghost::new(Position::from_xy(0, 0), GhostState::Home); 4],
+            dot_counters: [0; 4],
+            global_counter: None,
+            dot_timer: 0,
+            last_period: Period::Scatter,
             pill_duration: 6000,
             level,
             board,
@@ -243,7 +270,107 @@ impl Game {
     }
 
     fn reset_ghosts(&mut self) {
-        self.ghosts = self.board.ghost_start.map(Ghost::new);
+        self.ghosts = self
+            .board
+            .ghost_start
+            .map(|p| Ghost::new(p, GhostState::Home));
+        // Blinky starts outside the house
+        self.ghosts[BLINKY].state = GhostState::Outside;
+    }
+
+    /// Start of a level (`life_lost` false) or of a new life.
+    /// Call after the scatter/chase timer has been set.
+    fn reset_house_rules(&mut self, life_lost: bool) {
+        self.dot_timer = 0;
+        self.last_period = self.period();
+        if life_lost {
+            // the personal counters keep their values but are not used again until Clyde
+            // leaves; a global counter decides when the others leave
+            self.global_counter = Some(0);
+        } else {
+            self.dot_counters = [0; 4];
+            self.global_counter = None;
+        }
+    }
+
+    /// Dots a ghost must wait for before leaving the house, while it is first in line.
+    /// (The Pac-Man Dossier, "Home Sweet Home".)
+    fn dot_limit(&self, ghost: usize) -> u32 {
+        match (ghost, self.level) {
+            (INKY, 0) => 30,
+            (CLYDE, 0) => 60,
+            (CLYDE, 1) => 50,
+            _ => 0, // Pinky always, and everyone from the third level
+        }
+    }
+
+    /// The ghost that will be the next to leave: the first in line inside the house
+    fn next_in_house(&self) -> Option<usize> {
+        LEAVING_ORDER
+            .into_iter()
+            .find(|&i| self.ghosts[i].state == GhostState::Home)
+    }
+
+    fn release(&mut self, ghost: usize) {
+        self.ghosts[ghost].state = GhostState::Leaving;
+    }
+
+    /// Pacman ate a dot or an energizer
+    fn dot_eaten(&mut self) {
+        self.dot_timer = 0;
+        if let Some(n) = self.global_counter {
+            let n = n + 1;
+            self.global_counter = Some(n);
+            let ghost = match n {
+                7 => PINKY,
+                17 => INKY,
+                32 => CLYDE,
+                _ => return,
+            };
+            if self.ghosts[ghost].state == GhostState::Home {
+                self.release(ghost);
+                if ghost == CLYDE {
+                    self.global_counter = None; // the personal counters are used again
+                }
+            }
+            // (if Clyde is not inside at 32 the counter just goes on - as in the arcade game)
+        } else if let Some(ghost) = self.next_in_house() {
+            self.dot_counters[ghost] += 1;
+            self.release_ghosts_at_limit();
+        }
+    }
+
+    fn release_ghosts_at_limit(&mut self) {
+        if self.global_counter.is_some() {
+            return;
+        }
+        while let Some(ghost) = self.next_in_house() {
+            if self.dot_counters[ghost] < self.dot_limit(ghost) {
+                break;
+            }
+            self.release(ghost);
+        }
+    }
+
+    /// A pacman that avoids dots can't keep the ghosts in the house forever
+    fn tick_release_timer(&mut self, telaps: u128) {
+        self.dot_timer += telaps;
+        let limit = if self.level >= 4 { 3000 } else { 4000 };
+        if self.dot_timer >= limit {
+            self.dot_timer = 0;
+            if let Some(ghost) = self.next_in_house() {
+                self.release(ghost);
+            }
+        }
+    }
+
+    /// Ghosts inside the house leave to the right, not the left, if the mode has changed
+    fn mode_changed(&mut self) {
+        for g in self.ghosts.iter_mut() {
+            if matches!(g.state, GhostState::Home | GhostState::Leaving) {
+                g.exit_right = true;
+            }
+        }
     }
 
     fn period(&self) -> Period {
@@ -266,6 +393,7 @@ impl Game {
     }
 
     fn ghosts_are_edible(&mut self, duration: u128) {
+        self.mode_changed();
         for g in self.ghosts.iter_mut() {
             if matches!(g.state, GhostState::Outside | GhostState::Gateway) {
                 // a pill eaten while ghosts are still frightened restarts the
@@ -347,32 +475,61 @@ impl Game {
     fn update_ghosts(&mut self, telaps: u128) {
         let (scatter_target, chase_target) = self.ghost_targets();
         let current_period = self.period();
+        if current_period != self.last_period {
+            self.last_period = current_period;
+            self.mode_changed();
+        }
+        // Blinky has no dot counter - he leaves at once, e.g. after being eaten
+        if self.ghosts[BLINKY].state == GhostState::Home {
+            self.release(BLINKY);
+        }
+        self.release_ghosts_at_limit();
+        self.tick_release_timer(telaps);
         for (gidx, g) in self.ghosts.iter_mut().enumerate() {
             g.edible_duration = g.edible_duration.saturating_sub(telaps);
             (g.direction, g.pos) = match g.state {
                 GhostState::Home => {
-                    let pos = g.pos.go([Left, Right, Up, Down][rand::random_range(0..4)]);
-                    match self.board[pos] {
-                        Square::House => (Left, pos),
-                        Square::Gate => {
+                    // bob up and down while waiting
+                    g.bob_ms += telaps;
+                    if g.bob_ms < BOB_MS {
+                        (g.direction, g.pos)
+                    } else {
+                        g.bob_ms -= BOB_MS;
+                        let inside = |p| matches!(self.board[p], Square::House | Square::Empty);
+                        let dir = if inside(g.pos.go(g.direction)) {
+                            g.direction
+                        } else {
+                            g.direction.opposite()
+                        };
+                        (dir, g.pos.go(dir))
+                    }
+                }
+                GhostState::Leaving => {
+                    // sideways to the gate, then up through it
+                    let gate_col = self.board.gate1.col();
+                    if g.pos.col() != gate_col {
+                        let dir = if g.pos.col() < gate_col { Right } else { Left };
+                        (dir, g.pos.go(dir))
+                    } else {
+                        let pos = g.pos.go(Up);
+                        if self.board[pos] == Square::Gate {
                             g.state = GhostState::Gateway;
-                            (Left, pos)
                         }
-                        _ => (g.direction, g.pos),
+                        (Up, pos)
                     }
                 }
                 GhostState::Gateway => {
                     g.state = GhostState::Outside;
-                    if pct(50) {
-                        (Left, g.pos.go(Up))
-                    } else {
-                        (Right, g.pos.go(Up))
-                    }
+                    let dir = if g.exit_right { Right } else { Left };
+                    (dir, g.pos.go(Up))
                 }
                 GhostState::Dead => {
                     if g.pos == self.board.gate1 || g.pos == self.board.gate2 {
+                        // revived: waits (bobbing) until released like the others
                         g.state = GhostState::Home;
-                        (g.direction, g.pos.go(Down))
+                        g.exit_right = false;
+                        g.bob_ms = 0;
+                        (Down, g.pos.go(Down))
                     } else if g.pos == self.board.front_of_gate1
                         || g.pos == self.board.front_of_gate2
                     {
@@ -412,10 +569,12 @@ impl Game {
                 self.score += 10;
                 self.dots_left -= 1;
                 self.board[pos] = Square::Empty;
+                self.dot_eaten();
             }
             Square::Pill => {
                 self.am.play(Sound::EatPill);
                 self.board[pos] = Square::Empty;
+                self.dot_eaten();
                 self.ghosts_are_edible(self.pill_duration);
                 self.score += 50;
                 self.next_ghost_score = 200;
@@ -488,6 +647,7 @@ impl Game {
                     self.reset_ghosts();
                     self.player = Player::new(self.board.pacman_start);
                     self.timecum = 0;
+                    self.reset_house_rules(false);
                 }
                 GameState::LifeLost => {
                     if self.lives == 0 {
@@ -497,6 +657,7 @@ impl Game {
                     thread::sleep(time::Duration::from_millis(100));
                     self.reset_ghosts();
                     self.player = Player::new(self.board.pacman_start);
+                    self.reset_house_rules(true);
                 }
             };
         }
@@ -678,5 +839,164 @@ mod tests {
         let (scatter, _) = g.ghost_targets();
         assert_eq!(xy(scatter[2]), (w - 1, g.board.height));
         assert_eq!(xy(scatter[3]), (0, g.board.height));
+    }
+
+    fn eat_dots(g: &mut Game, n: u32) {
+        for _ in 0..n {
+            g.dot_eaten();
+        }
+    }
+
+    fn states(g: &Game) -> [GhostState; 4] {
+        g.ghosts.map(|g| g.state)
+    }
+
+    #[test]
+    fn level_1_ghosts_leave_after_0_30_and_then_60_more_dots() {
+        use GhostState::*;
+        let mut g = Game::new(0);
+        assert_eq!(states(&g), [Home, Outside, Home, Home]); // Blinky starts outside
+        g.release_ghosts_at_limit();
+        assert_eq!(states(&g), [Leaving, Outside, Home, Home]); // Pinky: no wait
+
+        eat_dots(&mut g, 29);
+        assert_eq!(g.ghosts[INKY].state, Home);
+        eat_dots(&mut g, 1);
+        assert_eq!(states(&g), [Leaving, Outside, Leaving, Home]); // Inky: 30 dots
+
+        eat_dots(&mut g, 59);
+        assert_eq!(g.ghosts[CLYDE].state, Home);
+        eat_dots(&mut g, 1);
+        assert_eq!(g.ghosts[CLYDE].state, Leaving); // Clyde: 60 dots after Inky left
+    }
+
+    #[test]
+    fn level_2_and_3_limits() {
+        use GhostState::*;
+        let mut g = Game::new(1);
+        g.release_ghosts_at_limit();
+        assert_eq!(states(&g), [Leaving, Outside, Leaving, Home]); // Inky no longer waits
+        eat_dots(&mut g, 49);
+        assert_eq!(g.ghosts[CLYDE].state, Home);
+        eat_dots(&mut g, 1);
+        assert_eq!(g.ghosts[CLYDE].state, Leaving); // Clyde: 50
+
+        let mut g = Game::new(2);
+        g.release_ghosts_at_limit();
+        assert_eq!(states(&g), [Leaving, Outside, Leaving, Leaving]); // nobody waits
+    }
+
+    #[test]
+    fn no_dots_for_a_while_releases_the_next_ghost() {
+        use GhostState::*;
+        let mut g = Game::new(0);
+        g.release_ghosts_at_limit(); // Pinky out
+        g.tick_release_timer(3999);
+        assert_eq!(g.ghosts[INKY].state, Home);
+        g.tick_release_timer(1);
+        assert_eq!(states(&g), [Leaving, Outside, Leaving, Home]); // after 4 s
+        g.tick_release_timer(4000);
+        assert_eq!(g.ghosts[CLYDE].state, Leaving);
+
+        // every dot restarts the timer
+        let mut g = Game::new(0);
+        g.release_ghosts_at_limit();
+        g.tick_release_timer(3000);
+        g.dot_eaten();
+        g.tick_release_timer(3000);
+        assert_eq!(g.ghosts[INKY].state, Home);
+
+        // from level 5 the wait is 3 s
+        let mut g = Game::new(4);
+        g.reset_ghosts();
+        g.dot_counters = [0, 0, 0, 0];
+        g.ghosts[PINKY].state = Leaving;
+        g.tick_release_timer(2999);
+        assert_eq!(g.ghosts[INKY].state, Home);
+        g.tick_release_timer(1);
+        assert_eq!(g.ghosts[INKY].state, Leaving);
+    }
+
+    #[test]
+    fn after_a_lost_life_a_global_counter_decides() {
+        use GhostState::*;
+        let mut g = Game::new(0);
+        g.dot_counters[INKY] = 5;
+        g.reset_ghosts();
+        g.reset_house_rules(true);
+        g.release_ghosts_at_limit(); // the personal limits are not used now
+        assert_eq!(states(&g), [Home, Outside, Home, Home]);
+
+        eat_dots(&mut g, 6);
+        assert_eq!(g.ghosts[PINKY].state, Home);
+        eat_dots(&mut g, 1);
+        assert_eq!(g.ghosts[PINKY].state, Leaving); // 7
+        eat_dots(&mut g, 9);
+        assert_eq!(g.ghosts[INKY].state, Home);
+        eat_dots(&mut g, 1);
+        assert_eq!(g.ghosts[INKY].state, Leaving); // 17
+        eat_dots(&mut g, 14);
+        assert_eq!(g.ghosts[CLYDE].state, Home);
+        eat_dots(&mut g, 1);
+        assert_eq!(g.ghosts[CLYDE].state, Leaving); // 32
+        assert_eq!(g.global_counter, None); // the personal counters are in charge again
+        assert_eq!(g.dot_counters[INKY], 5); // ... and were not reset by the lost life
+
+        // Clyde isn't inside at 32: the global counter just goes on
+        let mut g = Game::new(0);
+        g.reset_house_rules(true);
+        g.ghosts[CLYDE].state = Outside;
+        eat_dots(&mut g, 32);
+        assert_eq!(g.global_counter, Some(32));
+
+        // a new level starts afresh
+        g.reset_house_rules(false);
+        assert_eq!((g.global_counter, g.dot_counters), (None, [0; 4]));
+    }
+
+    #[test]
+    fn leaving_the_house() {
+        let mut g = Game::new(0);
+        let gate = g.board.front_of_gate1;
+        // Pinky leaves at once, and to the left as the mode has not changed
+        for _ in 0..6 {
+            g.update_ghosts(150);
+            if g.ghosts[PINKY].state == GhostState::Outside {
+                break;
+            }
+        }
+        let pinky = g.ghosts[PINKY];
+        assert!(pinky.state == GhostState::Outside && pinky.pos == gate && pinky.direction == Left);
+
+        // a ghost still inside when the mode changes leaves to the right instead
+        let mut g = Game::new(0);
+        g.timecum = 7000; // scatter -> chase
+        g.update_ghosts(150);
+        assert!(g.ghosts[INKY].exit_right && g.ghosts[CLYDE].exit_right);
+        let mut g = Game::new(0);
+        g.ghosts_are_edible(6000); // so does a pill
+        assert!(g.ghosts[INKY].exit_right);
+
+        // a ghost that was eaten waits inside again, and leaves as soon as it is its turn
+        let mut g = Game::new(0);
+        g.ghosts[BLINKY].state = GhostState::Home;
+        g.ghosts[BLINKY].pos = g.board.gate1.go(Down);
+        g.update_ghosts(150);
+        assert_ne!(g.ghosts[BLINKY].state, GhostState::Home);
+    }
+
+    #[test]
+    fn waiting_ghosts_bob_up_and_down() {
+        let mut g = Game::new(0);
+        let (col, row) = (g.ghosts[INKY].pos.col(), g.ghosts[INKY].pos.row());
+        let mut rows = std::collections::BTreeSet::new();
+        for _ in 0..20 {
+            // 3 s: Inky is still waiting
+            g.update_ghosts(150);
+            assert_eq!(g.ghosts[INKY].state, GhostState::Home);
+            assert_eq!(g.ghosts[INKY].pos.col(), col);
+            rows.insert(g.ghosts[INKY].pos.row());
+        }
+        assert_eq!(rows, [row - 1, row, row + 1].into());
     }
 }

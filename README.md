@@ -7,6 +7,7 @@ Pac-Man for the terminal, in Rust.
 ## Features
 
 * Ghosts alternate between 'scatter' (each heads for its own corner) and 'chase' periods, each with its original targeting.
+* Ghosts leave the ghost house as in the arcade game: each waits for a number of dots (a global count after a lost life), or for a timer if pacman stops eating.
 * Ghosts flee pacman when frightened, and slow down in the tunnel and when frightened.
 * When eaten, ghost eyes trace a path back to the ghost house.
 * Two 'fruit' bonuses on every level.

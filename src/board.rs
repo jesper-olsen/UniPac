@@ -97,7 +97,7 @@ pub struct Board {
     pub front_of_gate2: Position,
     pub fruit: Position,
     pub pacman_start: Position,
-    pub ghost_start: [Position; 4],
+    pub ghost_start: [Position; 4], // Pinky, Blinky, Inky, Clyde
 }
 
 impl Board {
@@ -155,24 +155,23 @@ impl Board {
                 .position(|c| *c == Square::Start)
                 .expect("no start position for pacman"),
         );
-        let (min_col, max_col, min_row, max_row) = board
+        let (min_row, max_row) = board
             .iter()
             .enumerate()
             .filter(|&(_, sq)| *sq == Square::House)
-            .map(|(i, _)| {
-                let p = Position(i);
-                (p.col(), p.col(), p.row(), p.row())
-            })
-            .reduce(|(min_c, max_c, min_r, max_r), (c, _, r, _)| {
-                (min_c.min(c), max_c.max(c), min_r.min(r), max_r.max(r))
-            })
-            .expect("no ghost house");
+            .map(|(i, _)| Position(i).row())
+            .fold((usize::MAX, 0), |(lo, hi), r| (lo.min(r), hi.max(r)));
+        assert!(min_row <= max_row, "no ghost house");
 
+        // As in the arcade game: Blinky starts outside, above the gate. The others start
+        // inside, in the middle row: Pinky below the gate, Inky two tiles to the left and
+        // Clyde two to the right.
+        let middle = (min_row + max_row) / 2;
         let ghost_start = [
-            Position::from_xy(min_col, min_row),
-            Position::from_xy(max_col, min_row),
-            Position::from_xy(min_col, max_row),
-            Position::from_xy(max_col, max_row),
+            Position::from_xy(gate1.col(), middle),     // Pinky
+            gate1.go(Up),                               // Blinky
+            Position::from_xy(gate1.col() - 2, middle), // Inky
+            Position::from_xy(gate1.col() + 2, middle), // Clyde
         ];
         Board {
             board,
@@ -215,6 +214,47 @@ mod tests {
     fn test_eval() {
         for i in 0..4 {
             let _ = Board::new(i);
+        }
+    }
+
+    #[test]
+    fn ghost_house_starts() {
+        for level in 0..7 {
+            let b = Board::new(level);
+            let [pinky, blinky, inky, clyde] = b.ghost_start;
+            assert_eq!(
+                b[blinky],
+                Square::Empty,
+                "Blinky starts outside, level {level}"
+            );
+            for g in [pinky, inky, clyde] {
+                // inside the house: the tiles between the gate and the walls, in one row
+                assert!(
+                    matches!(b[g], Square::House | Square::Empty),
+                    "level {level}"
+                );
+                assert_eq!(g.row(), pinky.row());
+            }
+            // straight up from Pinky is the gate, through house tiles only (2 or 3 rows high)
+            let mut p = pinky;
+            loop {
+                p = p.go(Up);
+                match b[p] {
+                    Square::House => (),
+                    Square::Gate => break,
+                    sq => panic!("level {level}: unexpected {sq:?} above Pinky"),
+                }
+            }
+            assert!(p == b.gate1);
+            // Inky and Clyde can walk to the gate column along their row
+            let (lo, hi) = (inky.col(), clyde.col());
+            for c in lo..=hi {
+                let t = Position::from_xy(c, pinky.row());
+                assert!(
+                    matches!(b[t], Square::House | Square::Empty),
+                    "level {level} col {c}"
+                );
+            }
         }
     }
 }
