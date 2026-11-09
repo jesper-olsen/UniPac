@@ -296,7 +296,8 @@ pub fn another_game(game: &mut Game) -> io::Result<bool> {
         w.flush()?;
         game.mq_idx = (game.mq_idx + 1) % MARQUEE.len();
 
-        if poll(Duration::from_millis(120))? {
+        // same pace as the game, which scrolls the marquee once per 150 ms frame
+        if poll(Duration::from_millis(150))? {
             match read() {
                 Ok(Event::Key(key_event))
                     if key_event.kind == crossterm::event::KeyEventKind::Press =>

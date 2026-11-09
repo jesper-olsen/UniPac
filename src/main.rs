@@ -65,7 +65,7 @@ static MARQUEE: &str = "Title: Plato and Socrates Discuss Pac-Man. \
     Plato: Oh, be quiet, Socrates! \
     (They sit before the game. Plato loses his first life almost immediately.) \
     Socrates: I see we have discovered another Form: the ideal player, who exists only in theory. \
-    Fin.   "; 
+    Fin.   ";
 
 const MAX_PACMAN_LIVES: u32 = 6;
 fn pct(n: u8) -> bool {
@@ -813,12 +813,15 @@ fn main() -> io::Result<()> {
     }));
 
     tui::init_render()?;
+    let mut mq_idx = 0;
     loop {
         let mut game = Game::new(args.level - 1); // levels are 1-based on the command line and in the panel
+        game.mq_idx = mq_idx; // the marquee carries on where the last game left it
         game.run()?;
         if !tui::another_game(&mut game)? {
             break;
         }
+        mq_idx = game.mq_idx;
     }
     tui::close_render()
 }
@@ -826,6 +829,14 @@ fn main() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marquee_is_ascii() {
+        // draw_marquee slices it by bytes, which panics on a multi-byte character
+        // (curly quotes and dashes from ChatGPT, say)
+        assert!(MARQUEE.is_ascii());
+        assert!(MARQUEE.ends_with(' ')); // a gap where it wraps around
+    }
 
     fn xy(p: Position) -> (usize, usize) {
         (p.col(), p.row())
