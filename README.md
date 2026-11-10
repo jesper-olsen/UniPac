@@ -11,6 +11,7 @@ Pac-Man for the terminal, in Rust.
 * Ghosts flee pacman when frightened, and slow down in the tunnel and when frightened.
 * When eaten, ghost eyes trace a path back to the ghost house.
 * Two 'fruit' bonuses on every level.
+* An intermission ('coffee break') after level 2: Blinky chases pacman, then a giant pacman chases a frightened Blinky.
 * Cornering: steer early and pacman takes the first opening.
 * Mazes: shortened pacman maze (24 rows), regular pacman maze (29 rows) and 4 Ms Pacman mazes (31 rows).
 
@@ -34,7 +35,7 @@ The high score is saved between runs, in `~/.local/share/unipac` on Linux and `~
 
 ## Controls
 
-Arrow keys to steer, space to pause, q or Esc to quit.
+Arrow keys to steer, space to pause, q or Esc to quit. Space or Enter skips an intermission.
 
 
 ## Credits

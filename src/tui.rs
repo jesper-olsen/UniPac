@@ -1,6 +1,8 @@
 use crate::{
     Fruit, Game, GhostState, MARQUEE, MAX_PACMAN_LIVES, Period, Position,
+    audio::Sound,
     board::{Direction, Square},
+    intermission::{self, Act, HALF_MS, Kind, Sprite},
     maze::WIDTH,
 };
 use crossterm::{
@@ -10,7 +12,7 @@ use crossterm::{
     terminal,
 };
 use std::io::{self, Write, stdout};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Terminal cells per maze tile. Cells are roughly twice as tall as wide, so
 /// 2x1 cells per tile makes tiles close to square, and it is exactly the width
@@ -198,13 +200,19 @@ pub fn draw_board<W: Write>(w: &mut W, game: &Game, bold: bool) -> io::Result<()
     Ok(())
 }
 
-pub fn draw_player<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
-    let ch = match game.player.last_input_direction {
+/// Pacman, in animation frame 0..6
+fn pacman_glyph(dir: Direction, frame: usize) -> char {
+    let frames = match dir {
         Direction::Left => ['}', ')', '>', '-', '>', ')'],
         Direction::Right => ['{', '(', '<', '-', '<', '('],
         Direction::Up => ['V', 'V', 'V', 'V', '|', '|'],
         Direction::Down => ['^', '^', '^', '^', '|', '|'],
-    }[game.player.anim_frame];
+    };
+    frames[frame]
+}
+
+pub fn draw_player<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
+    let ch = pacman_glyph(game.player.last_input_direction, game.player.anim_frame);
     let (col, row) = (sx(game.player.pos.col()), game.player.pos.row() as u16);
     crossterm::queue!(
         w,
@@ -478,6 +486,133 @@ pub fn draw_ghosts<W: Write>(w: &mut W, game: &Game) -> io::Result<()> {
         )?;
     }
     Ok(())
+}
+
+// ----------------------------------------------------------------------------------------
+// Intermissions
+
+/// The giant pacman of the first intermission, facing right: mouth closed, half open, open.
+/// Each is 3 rows of `GIANT_W` columns.
+const GIANT: [[&str; 3]; 3] = [
+    [" ▄███▄ ", "███████", " ▀███▀ "],
+    [" ▄███▄ ", "█████  ", " ▀███▀ "],
+    [" ▄███  ", "████   ", " ▀███  "],
+];
+
+/// Prints `text` with its first column at column `x` of a stage `stage_w` columns wide,
+/// but only what is on the stage. An emoji (`wide`) is two columns and is only shown whole.
+fn put<W: Write>(
+    w: &mut W,
+    x: i32,
+    row: u16,
+    text: &str,
+    wide: bool,
+    stage_w: i32,
+) -> io::Result<()> {
+    if wide {
+        if x >= 0 && x + 2 <= stage_w {
+            crossterm::queue!(w, cursor::MoveTo(x as u16, row), style::Print(text))?;
+        }
+        return Ok(());
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let from = (-x).max(0) as usize;
+    let to = ((stage_w - x).max(0) as usize).min(chars.len());
+    if from < to {
+        let visible: String = chars[from..to].iter().collect();
+        crossterm::queue!(
+            w,
+            cursor::MoveTo((x + from as i32) as u16, row),
+            style::PrintStyledContent(visible.bold().yellow())
+        )?;
+    }
+    Ok(())
+}
+
+fn draw_sprite<W: Write>(w: &mut W, s: &Sprite, row: u16, stage_w: i32) -> io::Result<()> {
+    match s.kind {
+        Kind::Pacman(dir) => put(
+            w,
+            s.x,
+            row,
+            &pacman_glyph(dir, s.anim).to_string(),
+            false,
+            stage_w,
+        ),
+        Kind::Blinky => put(w, s.x, row, "\u{1F479}", true, stage_w),
+        Kind::Frightened => put(w, s.x, row, "\u{1F631}", true, stage_w),
+        Kind::Giant => {
+            for (i, line) in GIANT[s.anim].iter().enumerate() {
+                put(w, s.x, row - 1 + i as u16, line, false, stage_w)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Plays an intermission, where the maze usually is: the panel on the right and the marquee
+/// carry on. Space or Enter skips it. Returns false if the player quit instead.
+pub fn intermission(game: &mut Game, act: Act) -> io::Result<bool> {
+    const FRAME: Duration = Duration::from_millis(50);
+    let stage_w = sx(WIDTH) as i32;
+    let row = (game.board.height / 2) as u16; // the middle row of the giant pacman
+
+    while poll(Duration::ZERO)? {
+        read()?; // the keys pressed while playing - don't let them skip the scene
+    }
+    clear_screen()?;
+    render_game_info()?;
+
+    let start = Instant::now();
+    let (mut halves_played, mut marquee_ticks, mut quit) = (0, 0, false);
+    'scene: loop {
+        let ms = start.elapsed().as_millis();
+        if ms >= act.duration_ms() {
+            break;
+        }
+        if ms / HALF_MS >= halves_played {
+            game.am.play(Sound::Intermission); // once for each half
+            halves_played += 1;
+        }
+        while marquee_ticks < ms / 150 {
+            game.mq_idx = (game.mq_idx + 1) % MARQUEE.len();
+            marquee_ticks += 1;
+        }
+        while poll(Duration::ZERO)? {
+            match read()? {
+                Event::Key(k) if k.kind == event::KeyEventKind::Press => {
+                    if is_quit(&k) {
+                        quit = true;
+                        break 'scene;
+                    }
+                    if matches!(k.code, KeyCode::Char(' ') | KeyCode::Enter) {
+                        break 'scene;
+                    }
+                }
+                Event::Resize(_, _) => {
+                    clear_screen()?;
+                    render_game_info()?;
+                }
+                _ => (),
+            }
+        }
+
+        let mut w = io::BufWriter::new(stdout());
+        let blank = " ".repeat(stage_w as usize);
+        for r in row - 1..=row + 1 {
+            crossterm::queue!(w, cursor::MoveTo(0, r), style::Print(&blank))?;
+        }
+        for s in intermission::sprites(act, ms, stage_w) {
+            if s.on_stage(stage_w) {
+                draw_sprite(&mut w, &s, row, stage_w)?;
+            }
+        }
+        render_rhs(&mut w, game)?;
+        w.flush()?;
+        std::thread::sleep(FRAME);
+    }
+    game.am.stop_last(); // if the scene was skipped
+    Ok(!quit)
 }
 
 #[cfg(test)]

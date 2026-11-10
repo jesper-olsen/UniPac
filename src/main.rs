@@ -5,6 +5,7 @@ use std::{thread, time};
 mod audio;
 mod board;
 mod highscore;
+mod intermission;
 mod maze;
 mod tui;
 use audio::{AM, Sound};
@@ -21,6 +22,13 @@ struct Config {
         value_parser = clap::value_parser!(u32).range(1..)
     )]
     level: u32,
+
+    #[arg(
+        long,
+        help = "Play intermission N (1) and exit",
+        value_parser = clap::value_parser!(u8).range(1..=1)
+    )]
+    intermission: Option<u8>,
 }
 
 static MARQUEE: &str = "Title: Plato and Socrates Discuss Pac-Man. \
@@ -665,6 +673,11 @@ impl Game {
             match game_loop(self)? {
                 GameState::UserQuit => break,
                 GameState::SheetComplete => {
+                    if let Some(act) = intermission::act_after(self.level)
+                        && !tui::intermission(self, act)?
+                    {
+                        break; // quit during the intermission
+                    }
                     self.level += 1;
                     self.repopulate_board();
                     tui::clear_screen()?; // next board may have different height
@@ -813,6 +826,11 @@ fn main() -> io::Result<()> {
     }));
 
     tui::init_render()?;
+    if let Some(act) = args.intermission.and_then(intermission::Act::from_number) {
+        let result = tui::intermission(&mut Game::new(args.level - 1), act);
+        tui::close_render()?;
+        return result.map(|_| ());
+    }
     let mut mq_idx = 0;
     loop {
         let mut game = Game::new(args.level - 1); // levels are 1-based on the command line and in the panel
